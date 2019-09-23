@@ -15,4 +15,4 @@ cnx = mysql.connector.MySQLConnection(
     port=os.getenv('db_port'),
     database=os.getenv('db_name')
 )
-db_cursor = cnx.cursor()
+db_cursor = cnx.cursor(buffered=True)
