@@ -3,12 +3,137 @@ from settings import cnx
 from settings import db_cursor as cursor
 
 
+class GinAptQuery(object):
+    @staticmethod
+    def get_apt_master_list():
+        # 아파트 단지 리스트 출력
+        query = ("""
+            SELECT idx
+            FROM apt_master
+            WHERE apt_master.bldg_cd=1 AND
+                  apt_master.total_num_of_family>=100;
+        """)
+        cursor.execute(query)
+        return cursor
+
+    @staticmethod
+    def get_apt_detail_list():
+        # 우리가 예측해야되는 아파트 리스트를 출력해주는 쿼리
+        # apt_detail_pk, apt_master_pk 를 반환
+        query = ("""
+            SELECT  d.master_idx, d.idx
+            FROM apt_detail d
+            INNER jOIN apt_master m
+              ON d.master_idx = m.idx
+            WHERE m.bldg_cd=1 AND
+                  m.total_num_of_family>=100
+            LIMIT 1000;
+        """)
+        cursor.execute(query, params=())
+        return cursor
+
+    @staticmethod
+    def get_trade_price(apt_detail_pk: int, trade_cd: str):
+        # 아파트의 매매, 전세/월세, 가격
+        if trade_cd == 't':
+            # 아파트 매매가격 리스트 출력
+            query = ("""
+                SELECT pk_apt_trade, pk_apt_detail, year, mon, real_day, floor, extent, t_amt
+                FROM apt_trade
+                WHERE EXCEPT_YN='n' AND pk_apt_detail=%s
+                ORDER BY deal_ymd;""")
+        elif trade_cd == 'd/r':
+            # TODO : 코드 변경 필요!!
+            # 아파트 전월세가격 리스트 출력
+            query = ("""
+                SELECT pk_apt_trade, pk_apt_detail, year, mon, real_day, floor, deposit, mrent_amt
+                FROM apt_rent
+                WHERE EXCEPT_YN='n' AND pk_apt_detail=%s
+                ORDER BY deal_ymd;""")
+        else:
+            raise NotImplemented()
+        cursor.execute(query, params=(apt_detail_pk, ))
+        return cursor
+
+    @staticmethod
+    def get_sale_price_with_floor(apt_detail_pk, date_range, floor, trade_cd):
+        # 해당 아파트 층의 매물가격 리스트 출력
+        query = """                
+            SELECT c.pk_apt_detail, d.reg_date, d.floor, d.price
+            FROM apt_detail a
+             INNER JOIN naver_apt_sale_detail_group c
+              ON a.idx = c.pk_apt_detail
+             INNER JOIN naver_apt_sale d
+              ON c.pk_naver_apt_master = d.idx
+             AND c.supply_extent = d.supply_extent
+             AND c.private_extent = d.extent
+            WHERE c.pk_apt_detail IN (%s)
+             AND d.reg_date IN (%s)
+             AND d.floor IN (%s)
+             AND d.use_yn = 'y'
+             AND d.trade_cd IN ("%s")
+           ORDER BY reg_date;
+        """ % (apt_detail_pk, date_range, floor, trade_cd)
+        cursor.execute(query)
+        return cursor
+
+    @staticmethod
+    def get_trade_price_with_floor(apt_detail_pk, date_range, floor, trade_cd):
+        if trade_cd == 't':
+            query = """
+                SELECT pk_apt_trade, pk_apt_detail, deal_ymd, floor, t_amt 
+                FROM apt_trade
+                WHERE EXCEPT_YN='n'
+                  AND pk_apt_detail in (%s)
+                  AND floor in (%s)
+                  AND deal_ymd IN (%s)
+                ORDER BY deal_ymd;
+            """ % (apt_detail_pk, floor, date_range)
+        else:
+            # TODO : 코드 변경 필요!!
+            query = """
+                SELECT pk_apt_trade, pk_apt_detail, deal_ymd, floor, t_amt 
+                FROM apt_trade
+                WHERE EXCEPT_YN='n'
+                    AND pk_apt_detail=%s
+                    AND floor = %s
+                    AND deal_ymd IN (%s)
+                ORDER BY deal_ymd;
+            """ % (apt_detail_pk, floor, date_range)
+        cursor.execute(query)
+        return cursor
+
+
 class GinQuery(object):
     @staticmethod
     def create_similarity_matrix():
         query = ("""
             CREATE 
         """)
+
+    @staticmethod
+    def get_pk_master_info(pk):
+        query = ("""
+            SELECT idx, master_idx 
+            FROM GIN.apt_detail 
+            WHERE idx=%s;
+        """)
+        cursor.execute(query, params=(pk, ))
+        return cursor
+
+    @staticmethod
+    def get_apt_pk_list():
+        query = ("""
+            SELECT d.idx, d.master_idx
+            FROM apt_detail d
+            INNER jOIN apt_master m
+              ON d.master_idx = m.idx
+            WHERE m.bldg_cd=1 AND
+                  m.total_num_of_family>=100
+            LIMIT 1000;
+        """)
+        cursor.execute(query, params=())
+        return cursor
 
     @staticmethod
     def get_pk_count():
@@ -30,6 +155,18 @@ class GinQuery(object):
         return cursor
 
     @staticmethod
+    def get_max_floor(pk):
+        query = ("""
+            SELECT a.max_jisang_floor, b.floor
+            FROM apt_master a
+            INNER JOIN apt_trade b
+                ON a.idx = b.idx
+            WHERE b.pk_apt_detail=%s;
+        """)
+        cursor.execute(query, params=(pk, ))
+        return cursor
+
+    @staticmethod
     def get_similarity(pk):
         query = ("""
             SELECT similarity
@@ -37,6 +174,21 @@ class GinQuery(object):
             WHERE pk_apt_detail=%s
         """)
         cursor.execute(query, params=(pk, ))
+        return cursor
+
+    @staticmethod
+    def get_trade_price_with_floor(pk, date, floor):
+        query = """
+            SELECT pk_apt_detail, deal_ymd, floor, t_amt 
+            FROM apt_trade
+            WHERE EXCEPT_YN='n'
+              AND pk_apt_detail=%s
+              AND floor = %s
+              AND deal_ymd IN (%s)
+            ORDER BY deal_ymd;
+        """ % (pk, floor, date)
+
+        cursor.execute(query)
         return cursor
 
     @staticmethod
@@ -51,18 +203,17 @@ class GinQuery(object):
         return cursor
 
     @staticmethod
-    def get_trade_price_with_date(pk, date):
-        query = """
+    def get_trade_price_with_date(pk):
+        query = ("""
             SELECT deal_ymd, t_amt
             FROM apt_trade
             WHERE EXCEPT_YN='n'
             AND pk_apt_detail=%s 
-            AND deal_ymd IN (%s)
-            ORDER BY deal_ymd;""" % (pk, date, )
+            # AND deal_ymd IN (%s)
+            ORDER BY deal_ymd;""")
 
-        cursor.execute(query)
+        cursor.execute(query, params=(pk, ))
         return cursor
-
 
     @staticmethod
     def get_trade_price_calc(pk, time, year, mon, real_day):
@@ -79,6 +230,19 @@ class GinQuery(object):
         return cursor
 
     @staticmethod
+    def get_group_apt_with_pk(master_pk):
+        query = ("""
+            SELECT d.idx, d.contract_extent, d.supply_extent, d.extent
+            FROM apt_detail d
+            INNER JOIN apt_master m
+                ON m.idx = d.master_idx
+            WHERE d.master_idx = m.idx
+              AND m.idx = %s;
+        """)
+        cursor.execute(query, params=(master_pk, ))
+        return cursor
+
+    @staticmethod
     def get_naver_sale_price_with_floor(pk, time, floor):
         query = """                
             SELECT c.pk_apt_detail, d.reg_date, d.floor, d.price
@@ -92,6 +256,27 @@ class GinQuery(object):
             WHERE c.pk_apt_detail = %s
              AND d.reg_date IN (%s)
              AND d.floor = %s
+             AND d.use_yn = 'y'
+             AND d.trade_cd IN ('t')
+           ORDER BY reg_date;
+        """ % (pk, time, floor)
+        cursor.execute(query)
+        return cursor
+
+    @staticmethod
+    def get_naver_sale_price_with_floor_group(pk, time, floor):
+        query = """                
+            SELECT c.pk_apt_detail, d.reg_date, d.floor, d.price
+            FROM apt_detail a
+             INNER JOIN naver_apt_sale_detail_group c
+              ON a.idx = c.pk_apt_detail
+             INNER JOIN naver_apt_sale d
+              ON c.pk_naver_apt_master = d.idx
+             AND c.supply_extent = d.supply_extent
+             AND c.private_extent = d.extent
+            WHERE c.pk_apt_detail = %s
+             AND d.reg_date IN (%s)
+             AND d.floor IN (%s)
              AND d.use_yn = 'y'
              AND d.trade_cd IN ('t')
            ORDER BY reg_date;
