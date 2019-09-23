@@ -1,85 +1,73 @@
 # -*- coding:utf-8 -*-
-from datetime import datetime
+import os
 import pandas as pd
+from datetime import datetime
 from database import GinAptQuery
-from settings import db_cursor as cursor
-from feature import AptPriceRegressionFeature
+from feature import make_feature
 
 
-class AptComplexGroup(object):
-    # 같은 단지안에 있는 아파트들을 Grouping 해주는 클래스
-    @staticmethod
-    def get_similarity_apt_list(apt_detail_pk):
-        # 비슷한 아파트 리스트 출력
-        cursor.execute("""
-            SELECT master_idx
-            FROM apt_detail
-            WHERE idx=%s
-        """, params=(apt_detail_pk, ))
-        apt_master_pk = cursor.fetchone()[0]
-        group_list = AptComplexGroup.apt_complex_groping(apt_master_pk)
+DATASET_DIR = './dataset'
+label_name = 'price'
+feature_name_list = [
+    'sale_price_with_floor',
+    'sale_price_with_floor_recent',
+    'sale_price_with_floor_group',
+    'sale_price_with_floor_group_recent',
+    'sale_price_with_complex_group',
+    'sale_price_with_complex_group_recent',
+    # 'trade_price_with_floor',
+    # 'trade_price_with_floor_recent',
+    # 'trade_price_with_floor_group',
+    # 'trade_price_with_floor_group_recent',
+    # 'trade_price_with_complex_group',
+    # 'trade_price_with_complex_group_recent'
+]
 
-        # group searching...
-        for group in group_list:
-            if apt_detail_pk in group:
-                return group
 
-    @staticmethod
-    def __apt_group__(temp):
-        # 아파트의 면적으로 평으로 환산한 후 위아래 3평을 같은 아파트로 묶음
-        group = []
-        if len(temp) == 0:
-            return group
+def make_dataset(filename, trade_cd='t'):
+    query = GinAptQuery()
+    #
+    pk_list = [pk for pk in GinAptQuery.get_apt_detail_list().fetchall()]
+    # pk_list = [(3, 1)]
 
-        df = pd.DataFrame()
-        num = 0
-        while True:
-            if num == 0:
-                df = pd.DataFrame(temp, columns=['detail_pk', 'extent', 'num_of_family'])
-            # 아파트의 면적으로 평으로 환산한 후 위아래 3평을 같은 아파트로 묶음
-            df['spm'] = df.extent * 0.3025
-            target_spm = df.spm.iloc[0]
+    total_data = []
+    for i, (apt_master_pk, apt_detail_pk) in enumerate(pk_list):
+        try:
+            print('i : {} apt detail pk : {}'.format(i, apt_detail_pk))
+            for trade_pk, _, year, mon, day, floor, extent, price in query.get_trade_price(apt_detail_pk, trade_cd).fetchall():
+                trg_date = '{0}-{1:02d}-{2:02d}'.format(year, int(mon), int(day))
+                trg_date = datetime.strptime(trg_date, '%Y-%m-%d')
+                price = price / extent
 
-            df['spm_range'] = df.spm.apply(lambda spm: spm-3 < target_spm < spm + 3)
+                feature_df = make_feature(
+                    feature_name_list=feature_name_list,
+                    apt_master_pk=apt_master_pk,
+                    apt_detail_pk=apt_detail_pk,
+                    trade_cd=trade_cd,
+                    trg_date=trg_date,
+                    sale_month_size=6,
+                    sale_recent_month_size=2,
+                    trade_month_size=6,
+                    trade_recent_month_size=2,
+                    floor=floor,
+                    extent=extent,
+                    trade_pk=trade_pk
+                )
+                if feature_df is not None:
+                    feature_df[label_name] = price
+                    total_data.append(feature_df)
+        except KeyboardInterrupt:
+            # file save
+            filepath = os.path.join(DATASET_DIR, filename)
+            total_df = pd.concat(total_data)
+            total_df = total_df.reset_index(drop=True)
+            total_df.to_csv(filepath, index=False)
 
-            group_df = df[df.spm_range][['detail_pk', 'extent', 'num_of_family']]
-            df = df[~df.spm_range][['detail_pk', 'extent', 'num_of_family']]
+    # file save
+    filepath = os.path.join(DATASET_DIR, filename)
+    total_df = pd.concat(total_data)
+    total_df = total_df.reset_index(drop=True)
+    total_df.to_csv(filepath, index=False)
 
-            group.append(group_df)
-            if len(df) == 0:
-                break
-            num += 1
-        return [list(df.detail_pk) for df in group]
 
-    @staticmethod
-    def apt_complex_groping(apt_master_pk):
-        # 아파트 단지안에 있는 아파트들을 Grouping
-        cursor.execute("""
-            SELECT idx, extent, num_of_family
-            FROM apt_detail
-            WHERE master_idx=%s
-            ORDER BY apt_detail.num_of_family DESC
-        """, params=(apt_master_pk, ))
-
-        group1 = []     # 85 미만  (extent < 85)
-        group2 = []     # 85 이상 135 미만  (85 <= extent < 135)
-        group3 = []     # 135 이상  (135 <= extent)
-
-        for idx, extent, num_of_family in cursor.fetchall():
-            extent = float(extent)
-            date = (idx, extent, num_of_family)
-
-            if extent < 85:
-                group1.append(date)
-            elif 85 <= extent < 135:
-                group2.append(date)
-            elif extent >= 135:
-                group3.append(date)
-
-        # 전체 데이터 Grouping
-        group1 = AptComplexGroup.__apt_group__(group1)
-        group2 = AptComplexGroup.__apt_group__(group2)
-        group3 = AptComplexGroup.__apt_group__(group3)
-        total_group = [i for group in (group1, group2, group3) for i in group]
-        return total_group
-
+make_dataset('sale_price.csv', trade_cd='t')
