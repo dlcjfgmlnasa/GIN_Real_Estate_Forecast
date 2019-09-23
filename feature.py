@@ -427,5 +427,124 @@ class AptPriceRegressionFeature(object):
         return df
 
 
-def make_feature():
-    pass
+def make_feature(feature_name_list, apt_master_pk, apt_detail_pk, trade_cd,
+                 trg_date, sale_month_size, sale_recent_month_size,
+                 trade_month_size, trade_recent_month_size,
+                 floor, extent, trade_pk):
+    feature = AptPriceRegressionFeature(
+        apt_master_pk=apt_master_pk,
+        apt_detail_pk=apt_detail_pk,
+        trade_cd=trade_cd
+    )
+
+    features = []
+    for feature_name in feature_name_list:
+        df = pd.DataFrame()
+        if feature_name == 'sale_price_with_floor':
+            df = feature.sale_price_with_floor(
+                trg_date=trg_date,
+                month_size=sale_month_size,
+                floor=floor,
+                extent=extent
+            )
+            if len(df) == 0:
+                return None
+        elif feature_name == 'sale_price_with_floor_recent':
+            df = feature.sale_price_with_floor_recent(
+                trg_date=trg_date,
+                max_month_size=sale_month_size,
+                recent_month_size=sale_recent_month_size,
+                floor=floor,
+                extent=extent
+            )
+        elif feature_name == 'sale_price_with_floor_group':
+            df = feature.sale_price_with_floor_group(
+                trg_date=trg_date,
+                month_size=sale_month_size,
+                floor=floor,
+                extent=extent
+            )
+        elif feature_name == 'sale_price_with_floor_group_recent':
+            df = feature.sale_price_with_floor_recent(
+                trg_date=trg_date,
+                max_month_size=sale_month_size,
+                recent_month_size=sale_recent_month_size,
+                floor=floor,
+                extent=extent
+            )
+        elif feature_name == 'sale_price_with_complex_group':
+            df = feature.sale_price_with_complex_group(
+                trg_date=trg_date,
+                month_size=sale_month_size,
+                floor=floor,
+                extent=extent
+            )
+        elif feature_name == 'sale_price_with_complex_group_recent':
+            df = feature.sale_price_with_complex_group_recent(
+                trg_date=trg_date,
+                max_month_size=sale_month_size,
+                recent_month_size=sale_recent_month_size,
+                floor=floor,
+                extent=extent
+            )
+
+        elif feature_name == 'trade_price_with_floor':
+            df = feature.trade_price_with_floor(
+                trg_date=trg_date,
+                month_size=trade_month_size,
+                floor=floor,
+                extent=extent,
+                trade_pk=trade_pk
+            )
+        elif feature_name == 'trade_price_with_floor_recent':
+            df = feature.trade_price_with_floor_recent(
+                trg_date=trg_date,
+                max_month_size=trade_month_size,
+                recent_month_size=trade_recent_month_size,
+                floor=floor,
+                extent=extent,
+                trade_pk=trade_pk
+            )
+        elif feature_name == 'trade_price_with_floor_group':
+            df = feature.trade_price_with_floor_group(
+                trg_date=trg_date,
+                month_size=trade_month_size,
+                floor=floor,
+                extent=extent,
+                trade_pk=trade_pk
+            )
+        elif feature_name == 'trade_price_with_floor_group_recent':
+            df = feature.trade_price_with_floor_group_recent(
+                trg_date=trg_date,
+                max_month_size=trade_month_size,
+                recent_month_size=trade_recent_month_size,
+                floor=floor,
+                extent=extent,
+                trade_pk=trade_pk
+            )
+        elif feature_name == 'trade_price_with_complex_group':
+            df = feature.trade_price_with_complex_group(
+                trg_date=trg_date,
+                month_size=trade_month_size,
+                floor=floor,
+                extent=extent,
+                trade_pk=trade_pk
+            )
+        elif feature_name == 'trade_price_with_complex_group_recent':
+            df = feature.trade_price_with_complex_group_recent(
+                trg_date=trg_date,
+                max_month_size=trade_month_size,
+                recent_month_size=trade_recent_month_size,
+                floor=floor,
+                extent=extent,
+                trade_pk=trade_pk
+            )
+
+        if len(df) != 0:
+            value = np.average(df.price)
+        else:
+            value = np.nan
+        features.append(value)
+
+    feature_df = pd.DataFrame([features], columns=feature_name_list)
+    return feature_df
