@@ -192,10 +192,10 @@ class AptPriceRegressionFeature(object):
         return df
 
     def sale_price_with_floor_group_recent(self, trg_date: datetime, max_month_size: int,
-                                           recent_month_size: int, floor: str, extent: float):
+                                           recent_month_size: int, floor: str, extent: float) -> pd.DataFrame:
         # 예측하고자하는 층의 이전 시간대의 [매물가격]을 이용한 feature
         # 비슷한 층수 데이터도 같이 사용
-        # 최근 데이터 사용
+        # 최근 데이터만 사용
 
         # floor list 출력
         floor_list = AptFloorGroup.get_similarity_apt_floor_list(
@@ -217,6 +217,7 @@ class AptPriceRegressionFeature(object):
         # 예측하고자하는 층의 이전 시간대의 [매물가격]을 이용한 feature
         # 비슷한 단지의 건물 데이터를 같이 사용
         # 비슷한 층수 데이터도 같이 사용
+
         pre_date = trg_date - datedelta(months=month_size)
         date_range = pd.date_range(pre_date, trg_date)
         date_range = ','.join([date.strftime('"%Y-%m-%d"') for date in date_range])
@@ -245,7 +246,8 @@ class AptPriceRegressionFeature(object):
         # 예측하고자하는 층의 이전 시간대의 [매물가격]을 이용한 feature
         # 비슷한 단지의 건물 데이터를 같이 사용
         # 비슷한 층수 데이터도 같이 사용
-        # 최근 데이터 사용
+        # 최근 데이터만 사용
+
         df = self.sale_price_with_complex_group(
             trg_date=trg_date,
             month_size=max_month_size,
@@ -266,11 +268,11 @@ class AptPriceRegressionFeature(object):
     # ---------------------------------------------------------------------------------------------- #
     # 2. 매매 정보
     # ---------------------------------------------------------------------------------------------- #
-
-    def trade_price_with_floor(self, trg_date: datetime, month_size: int, floor: int, extent: float, trade_pk=None)\
+    def trade_price_with_floor(self, trg_date: datetime, month_size: int, floor: str, extent: float, trade_pk=None)\
             -> pd.DataFrame():
         # 예측하고자하는 층의 이전 시간대의 [매매가격]을 이용한 feature
         # ex) apt detail pk 가 1인 아파트 8층 건물의 [매매가격정보]를 이용하고 싶다.
+
         pre_date = trg_date - datedelta(months=month_size)
         date_range = pd.date_range(pre_date, trg_date)
         date_range = ','.join([date.strftime('"%Y%m"') for date in date_range])
@@ -285,6 +287,7 @@ class AptPriceRegressionFeature(object):
             columns=['pk_apt_trade', 'apt_detail_pk', 'date', 'floor', 'price']
         )
         df.price = df.price / extent
+        df.price = df.price.astype(np.float)
 
         if trade_pk:
             # Train 을 위해 trade_pk 값은 제외 시킴
@@ -293,11 +296,12 @@ class AptPriceRegressionFeature(object):
         return df
 
     def trade_price_with_floor_recent(self, trg_date: datetime, max_month_size: int, recent_month_size: int,
-                                      floor: int, extent: float, trade_pk=None)\
+                                      floor: str, extent: float, trade_pk=None)\
             -> pd.DataFrame():
         # 예측하고자하는 층의 이전 시간대의 [매매가격]을 이용한 feature
         # max_month_size 안에서 가장 최근 데이터를 기준으로 recent_month_size 만큼의 [매매가격] 출력
         # ex) apt detail pk 가 1인 아파트 8층 건물의 가장 최근 [매매가격정보]를 이용하고 싶다.
+
         df = self.trade_price_with_floor(
             trg_date=trg_date,
             month_size=max_month_size,
@@ -317,6 +321,110 @@ class AptPriceRegressionFeature(object):
             df = df[df.date.apply(lambda date: date in recent_date_range)]
             return df
         return pd.DataFrame()
+
+    def trade_price_with_floor_group(self, trg_date: datetime, month_size: int,
+                                     floor: str, extent: float, trade_pk=None) -> pd.DataFrame:
+        # 예측하고자하는 층의 이전 시간대의 [매매가격]을 이용한 feature
+        # 비슷한 층수 데이터도 같이 사용
+
+        # floor list 출력
+        floor_list = AptFloorGroup.get_similarity_apt_floor_list(
+            apt_detail_pk=self.apt_detail_pk,
+            floor=floor
+        )
+        df = self.trade_price_with_floor(
+            trg_date=trg_date,
+            month_size=month_size,
+            floor=','.join([str(floor) for floor in floor_list]),
+            extent=extent,
+            trade_pk=trade_pk
+        )
+        return df
+
+    def trade_price_with_floor_group_recent(self, trg_date: datetime, max_month_size: int,
+                                            recent_month_size: int, floor: str, extent: float, trade_pk=None) \
+            -> pd.DataFrame:
+        # 예측하고자하는 층의 이전 시간대의 [매매가격]을 이용한 feature
+        # 비슷한 층수 데이터도 같이 사용
+        # 최근 데이터만 이용
+
+        # floor list 출력
+        floor_list = AptFloorGroup.get_similarity_apt_floor_list(
+            apt_detail_pk=self.apt_detail_pk,
+            floor=floor
+        )
+
+        df = self.trade_price_with_floor_recent(
+            trg_date=trg_date,
+            max_month_size=max_month_size,
+            recent_month_size=recent_month_size,
+            floor=','.join([str(floor) for floor in floor_list]),
+            extent=extent,
+            trade_pk=trade_pk
+        )
+        return df
+
+    def trade_price_with_complex_group(self, trg_date: datetime, month_size: int,
+                                       floor: str, extent: float, trade_pk=None) -> pd.DataFrame:
+        # 예측하고자하는 층의 이전 시간대의 [매매가격]을 이용한 feature
+        # 비슷한 단지의 건물 데이터를 같이 사용
+        # 비슷한 층수 데이터도 같이 사용
+
+        pre_date = trg_date - datedelta(months=month_size)
+        date_range = pd.date_range(pre_date, trg_date)
+        date_range = ','.join([date.strftime('"%Y%m"') for date in date_range])
+
+        # floor list 출력
+        floor_list = AptFloorGroup.get_similarity_apt_floor_list(
+            apt_detail_pk=self.apt_detail_pk,
+            floor=floor
+        )
+
+        df = pd.DataFrame(
+            self.query.get_trade_price_with_floor(
+                apt_detail_pk=','.join([str(apt) for apt in self.apt_complex_group_list]),
+                date_range=date_range,
+                floor=','.join([str(floor) for floor in floor_list]),
+                trade_cd=self.trade_cd
+            ),
+            columns=['pk_apt_trade', 'apt_detail_pk', 'date', 'floor', 'price']
+        )
+        df.price = df.price / extent
+        df.price = df.price.astype(np.float)
+
+        if trade_pk:
+            # Train 을 위해 trade_pk 값을 제외 시킴
+            df = df[df.pk_apt_trade.apply(lambda pk: pk != trade_pk)]
+
+        df = df[['apt_detail_pk', 'date', 'floor', 'price']]
+        return df
+
+    def trade_price_with_complex_group_recent(self, trg_date: datetime, max_month_size: int,
+                                              recent_month_size: int, floor: str, extent: float, trade_pk=None) \
+            -> pd.DataFrame:
+        # 예측하고자하는 층의 이전 시간대의 [매매가격]을 이용한 feature
+        # 비슷한 단지의 건물 데이터를 같이 사용
+        # 비슷한 층수 데이터도 같이 사용
+        # 최근 데이터만 사용
+
+        df = self.trade_price_with_complex_group(
+            trg_date=trg_date,
+            month_size=max_month_size,
+            floor=floor,
+            extent=extent,
+            trade_pk=trade_pk
+        )
+
+        if len(df) != 0:
+            recent_price = df.iloc[-1:]
+            recent_date = datetime.strptime(list(recent_price.date)[0], '%Y%m')
+            recent_pre_date = recent_date - datedelta(months=recent_month_size)
+            recent_date_range = pd.date_range(recent_pre_date, recent_date, freq='MS')
+            recent_date_range = [str(data.strftime("%Y%m")) for data in recent_date_range]
+
+            df = df[df.date.apply(lambda date: date in recent_date_range)]
+            return df
+        return df
 
 
 def make_feature():
