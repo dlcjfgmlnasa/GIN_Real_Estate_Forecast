@@ -1,5 +1,6 @@
 # -*- coding:utf-8 -*-
 import os
+import settings
 import argparse
 import numpy as np
 import pandas as pd
@@ -12,21 +13,17 @@ from sklearn.externals import joblib
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--features', type=list,
-                        default=[
-                            'sale_price_with_floor',
-                            'sale_price_with_floor_recent',
-                            'sale_price_with_floor_group',
-                            'sale_price_with_floor_group_recent',
-                            'sale_price_with_complex_group',
-                            'sale_price_with_complex_group_recent'
-                        ])
-    parser.add_argument('--model_store', type=str,
-                        default=os.path.join('model', 'store', 'linear_regression.model'))
     parser.add_argument('--apt_detail_pk', type=int, default=2)
-    parser.add_argument('--date', type=str, default='2019-09-24')
-    parser.add_argument('--previous_month_size', type=int, default=3)
-    parser.add_argument('--trade_cd', type=str, choices=['t', 'r'], default='t')
+    parser.add_argument('--features', type=list, default=settings.features)
+    parser.add_argument('--sale_month_size', type=int, default=settings.sale_month_size)
+    parser.add_argument('--sale_recent_month_size', type=int, default=settings.sale_recent_month_size)
+    parser.add_argument('--trade_month_size', type=int, default=settings.trade_month_size)
+    parser.add_argument('--trade_recent_month_size', type=int, default=settings.trade_month_size)
+
+    parser.add_argument('--model_path', type=str, default=settings.model_path)
+    parser.add_argument('--date', type=str, default=settings.current_date)
+    parser.add_argument('--previous_month_size', type=int, default=settings.predicate_previous_month_size)
+    parser.add_argument('--trade_cd', type=str, choices=['t', 'r'], default=settings.trade_cd)
     return parser.parse_args()
 
 
@@ -56,25 +53,18 @@ def main(argument):
     apt_extent = None
     for apt_master_pk, apt_detail_pk, date, floor, extent, price in new_trade_list:
         apt_extent = float(extent)
-        feature_df = make_feature(
-            feature_name_list=features,
-            apt_master_pk=apt_master_pk,
-            apt_detail_pk=apt_detail_pk,
-            trade_cd=argument.trade_cd,
-            trg_date=date,
-            sale_month_size=6,
-            sale_recent_month_size=2,
-            trade_month_size=6,
-            trade_recent_month_size=2,
-            floor=floor,
-            extent=extent
-        )
+        feature_df = make_feature(feature_name_list=features, apt_master_pk=apt_master_pk, apt_detail_pk=apt_detail_pk,
+                                  trade_cd=argument.trade_cd, trg_date=date,
+                                  sale_month_size=argument.sale_month_size,
+                                  sale_recent_month_size=argument.sale_recent_month_size,
+                                  trade_month_size=argument.trade_month_size,
+                                  trade_recent_month_size=argument.trade_recent_month_size, floor=floor, extent=extent)
         total_feature_df.append(feature_df)
     total_feature_df = pd.concat(total_feature_df).reset_index(drop=True)
     total_feature_df = total_feature_df.astype(np.float)
 
     # Load model...
-    model = joblib.load(argument.model_store)
+    model = joblib.load(argument.model_path)
 
     # Predication...
     predication = model.predict(total_feature_df) * apt_extent

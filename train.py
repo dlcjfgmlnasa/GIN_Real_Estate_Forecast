@@ -1,34 +1,25 @@
 # -*- coding:utf-8 -*-
 import os
-import pickle
+import settings
 import argparse
 import pandas as pd
-from data_helper import label_name
 from sklearn.externals import joblib
 from model import linear_regression, svm
 
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset_path', type=str,
-                        default=os.path.join('./dataset/', 'sale_price.csv'))
-    parser.add_argument('--features', type=list,
-                        default=[
-                            'sale_price_with_floor',
-                            'sale_price_with_floor_recent',
-                            'sale_price_with_floor_group',
-                            'sale_price_with_floor_group_recent',
-                            'sale_price_with_complex_group',
-                            'sale_price_with_complex_group_recent'
-                        ])
-    parser.add_argument('--model', type=str,  default='linear_regression',
+    parser.add_argument('--dataset_path', type=str, default=settings.save_path)
+    parser.add_argument('--features', type=list, default=settings.features)
+    parser.add_argument('--model', type=str,  default=settings.model_type,
                         choices=[
                             'linear_regression',
                             'svm',
                             'dnn'
                         ])
     parser.add_argument('--save_path', type=str, default=os.path.join('./model', 'store'))
-    parser.add_argument('--model_name', type=str, default='linear_regression.model')
+    parser.add_argument('--model_path', type=str, default=settings.model_path)
+    parser.add_argument('--label_name', type=str, default=settings.label_name)
     return parser.parse_args()
 
 
@@ -44,7 +35,6 @@ def train(feature_df: pd.DataFrame, label_df: pd.DataFrame, model: str):
 if __name__ == '__main__':
     args = get_args()
     df = pd.read_csv(args.dataset_path)
-    m = train(df[args.features], df[label_name], args.model)
-    filename = os.path.join(args.save_path, args.model_name)
-    joblib.dump(m, filename)
+    m = train(df[args.features], df[args.label_name], args.model)
+    joblib.dump(m, args.model_path)
 

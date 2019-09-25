@@ -1,38 +1,29 @@
 # -*- coding:utf-8 -*-
 import os
 import argparse
+import settings
 import numpy as np
 import pandas as pd
 from train import train
 from database import GinAptQuery
-from data_helper import label_name
 import matplotlib.pyplot as plt
 from sklearn.model_selection import KFold
 
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset_path', type=str,
-                        default=os.path.join('./dataset', 'sale_price.csv'))
-    parser.add_argument('--features', type=list,
-                        default=[
-                            'sale_price_with_floor',
-                            'sale_price_with_floor_recent',
-                            'sale_price_with_floor_group',
-                            'sale_price_with_floor_group_recent',
-                            'sale_price_with_complex_group',
-                            'sale_price_with_complex_group_recent'
-                        ])
-    parser.add_argument('--model', type=str, default='linear_regression',
+    parser.add_argument('--dataset_path', type=str, default=settings.save_path)
+    parser.add_argument('--features', type=list, default=settings.features)
+    parser.add_argument('--model', type=str, default=settings.model_type,
                         choices=[
                             'linear_regression',
                             'svm',
                             'dnn'
                         ])
-    parser.add_argument('--n_fold', type=int, default=10)
-    parser.add_argument('--plot_flag', type=bool, default=False)
-    parser.add_argument('--result_path', type=str,
-                        default=os.path.join('./result', 'linear_regression', 'test03.xlsx'))
+    parser.add_argument('--n_fold', type=int, default=settings.n_fold)
+    parser.add_argument('--plot_flag', type=bool, default=settings.plot_flag)
+    parser.add_argument('--result_path', type=str, default=settings.test_result_path)
+    parser.add_argument('--label_name', type=str, default=settings.label_name)
     return parser.parse_args()
 
 
@@ -48,6 +39,7 @@ def save_result(info, eval_result_list):
     }, index=['average'])
     total_evaluation = total_evaluation.reset_index(drop=True)
     total_evaluation = pd.concat([total_evaluation, total_evaluation_sum])
+    print('\nResult : ')
     print(total_evaluation)
 
     # Save...
@@ -136,6 +128,6 @@ def evaluation(real: np.ndarray, pred: np.ndarray, plot=True):
 if __name__ == '__main__':
     args = get_args()
     df = pd.read_csv(args.dataset_path)
-    result = test(df[args.features], df[label_name], df.apt_detail_pk, args.model, args.n_fold, args.plot_flag)
+    result = test(df[args.features], df[args.label_name], df.apt_detail_pk, args.model, args.n_fold, args.plot_flag)
     save_result(args, result)
 

@@ -17,7 +17,7 @@ class GinAptQuery(object):
         return cursor
 
     @staticmethod
-    def get_apt_detail_list():
+    def get_apt_detail_list(size):
         # 우리가 예측해야되는 아파트 리스트를 출력해주는 쿼리
         # apt_detail_pk, apt_master_pk 를 반환
         query = ("""
@@ -27,9 +27,9 @@ class GinAptQuery(object):
               ON d.master_idx = m.idx
             WHERE m.bldg_cd=1 AND
                   m.total_num_of_family>=100
-            LIMIT 10000;
+            LIMIT %s;
         """)
-        cursor.execute(query, params=())
+        cursor.execute(query, params=(size, ))
         return cursor
 
     @staticmethod
