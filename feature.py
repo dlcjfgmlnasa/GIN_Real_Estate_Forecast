@@ -430,7 +430,7 @@ class AptPriceRegressionFeature(object):
 def make_feature(feature_name_list, apt_master_pk, apt_detail_pk, trade_cd,
                  trg_date, sale_month_size, sale_recent_month_size,
                  trade_month_size, trade_recent_month_size,
-                 floor, extent, trade_pk):
+                 floor, extent, trade_pk=None):
     feature = AptPriceRegressionFeature(
         apt_master_pk=apt_master_pk,
         apt_detail_pk=apt_detail_pk,
