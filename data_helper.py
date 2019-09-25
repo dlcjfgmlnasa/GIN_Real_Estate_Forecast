@@ -1,6 +1,7 @@
 # -*- coding:utf-8 -*-
 import settings
 import argparse
+import numpy as np
 import pandas as pd
 from datetime import datetime
 from database import GinAptQuery
@@ -16,6 +17,7 @@ def get_args():
     parser.add_argument('--trade_recent_month_size', type=int, default=settings.trade_recent_month_size)
 
     parser.add_argument('--save_path', type=str, default=settings.save_path)
+    parser.add_argument('--correlation_path', type=str, default=settings.correlation_path)
     parser.add_argument('--trade_cd', type=str, choices=['t', 'c'], default=settings.trade_cd)
     parser.add_argument('--label_name', type=str, default=settings.label_name)
     parser.add_argument('--dataset_pk_size', type=int, default=100)
@@ -62,6 +64,37 @@ def main(argument):
     total_df.to_csv(argument.save_path, index=False)
 
 
+def correlation_analysis(argument):
+    df = pd.read_csv(argument.save_path)
+    label_name = argument.label_name
+
+    # making feature
+    columns = list(df.columns)
+    columns.remove(label_name)
+    columns.remove('apt_detail_pk')
+
+    correlation_list = []
+    for feature_name in columns:
+        feature_value = df[feature_name].values
+        label_value = df[label_name].values
+        size = np.size(feature_value)
+
+        # Calculation correlation ...
+        a = feature_value - (np.ones(size) * np.mean(feature_value))
+        b = label_value - (np.ones(size) * np.mean(label_value))
+        s = sum(a * b)
+        p = np.std(feature_value) * np.std(label_value)
+        corr = s / (size * p)
+        correlation_list.append(corr)
+
+    correlation_df = pd.DataFrame({
+        'feature': columns,
+        'corr_value': correlation_list
+    })
+    correlation_df.to_csv(argument.correlation_path, index=False)
+
+
 if __name__ == '__main__':
     args = get_args()
-    main(args)
+    # main(args)
+    correlation_analysis(args)
