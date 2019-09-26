@@ -1,13 +1,102 @@
 # -*- coding:utf-8 -*-
+import operator
+import datetime
+import numpy as np
 import pandas as pd
 from database import GinAptQuery
 from settings import db_cursor as cursor
 
 
 class AptGroup(object):
-    # 아파트 층과
-    def apt_apt_similarity(self):
-        pass
+    # 비슷한 아파트들을 묶는 클래스
+    @staticmethod
+    def get_price_df(apt_detail_pk: int, trade_cd: str) -> pd.DataFrame:
+        query = GinAptQuery()
+
+        price_df = pd.DataFrame(
+            query.get_trade_price(
+                apt_detail_pk=apt_detail_pk,
+                trade_cd=trade_cd
+            ),
+            columns=['pk_apt_trade', 'pk_apt_detail', 'year', 'mon', 'real_day', 'floor', 'extent', 'price']
+        )
+
+        # Dataset Cleaning
+        price_df.price = price_df.price / price_df.extent
+        trg_date = ['{0}-{1:02d}-{2:02d}'.format(year, int(mon), int(day))
+                    for year, mon, day in zip(price_df.year, price_df.mon, price_df.real_day)]
+        price_df['date'] = trg_date
+        price_df = price_df.drop(['pk_apt_trade', 'pk_apt_detail', 'year', 'mon', 'real_day', 'floor', 'extent'],
+                                 axis=1)[['date', 'price']]
+        price_df.price = price_df.price.astype(np.float)
+
+        temp = []
+        for date in pd.date_range(start='2006-01-01', end=datetime.datetime.now().strftime('%Y-%m-%d')):
+            date = date.strftime('%Y-%m-%d')
+            df = price_df[price_df.date == date]
+            if len(df) != 0:
+                temp.append((date, np.average(df.price)))
+            else:
+                temp.append((date, np.nan))
+
+        # Interpolation...
+        interpolate_price_df = pd.DataFrame(temp, columns=['date', 'price']).interpolate()
+        try:
+            last_index = interpolate_price_df[interpolate_price_df.price.isna()].index[-1] + 1
+            first_interpolate_value = interpolate_price_df.price.iloc[last_index]
+            interpolate_price_df = interpolate_price_df.fillna(first_interpolate_value)
+        except IndexError:
+            pass
+        return interpolate_price_df
+
+    @staticmethod
+    def apt_apt_similarity(apt_detail_pk: int, trade_cd: str, limit_size: int):
+        def root_mean_square_error(pred, true):
+            return np.sqrt(((pred - true) ** 2).mean())
+
+        # apt_detail_pk 로 부터 3Km 이내의 아파트 리스트 출력
+        nearest_apt_df = pd.DataFrame(
+            GinAptQuery.get_nearest_3km_apt(
+                apt_detail_pk=apt_detail_pk
+            ),
+            columns=['distance', 'detail_pk']
+        )
+
+        target_price_df = AptGroup.get_price_df(
+            apt_detail_pk=apt_detail_pk,
+            trade_cd=trade_cd
+        )
+
+        # Calculation Similarity
+        similarity = {}
+        nearest_apt_list = nearest_apt_df.detail_pk.values
+        size = len(nearest_apt_list)
+        for i, detail_pk in enumerate(nearest_apt_list):
+            price_df = AptGroup.get_price_df(
+                apt_detail_pk=int(detail_pk),
+                trade_cd=trade_cd
+            )
+
+            if len(price_df) == 0:
+                continue
+
+            # Comparing...
+            print('\t[{}/{}]  Comparing = target_pk : {} / source_pk : {}'
+                  .format(size, i, apt_detail_pk, detail_pk))
+            similarity_value = root_mean_square_error(
+                pred=price_df.price.values,
+                true=target_price_df.price.values
+            )
+            print('\t\t=> similarity : {}\n'.format(similarity_value))
+            similarity[detail_pk] = similarity_value
+
+        # Ranking...
+        similarity_ranking_detail_pk = [
+            detail_pk
+            for detail_pk, similarity_value in sorted(similarity.items(), key=operator.itemgetter(1))
+        ][:limit_size]
+        similarity_ranking_detail_pk = [apt_detail_pk] + similarity_ranking_detail_pk
+        return similarity_ranking_detail_pk
 
 
 class AptFloorGroup(object):

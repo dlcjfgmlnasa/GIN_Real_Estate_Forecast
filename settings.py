@@ -53,6 +53,8 @@ sale_recent_month_size = 2
 trade_month_size = 6
 trade_recent_month_size = 2
 
+similarity_size = 10
+
 # 2. model information parameter
 save_path = os.path.join('./dataset', 'apt_dataset.csv')
 model_path = os.path.join('./model', 'store', 'linear_regression.model')

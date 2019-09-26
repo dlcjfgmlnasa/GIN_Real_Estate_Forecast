@@ -3,8 +3,9 @@ import settings
 import argparse
 import numpy as np
 import pandas as pd
+from grouping import AptGroup
 from datetime import datetime
-from database import GinAptQuery
+from database import GinAptQuery, cursor, cnx
 from feature import make_feature
 
 
@@ -19,6 +20,8 @@ def get_args():
     parser.add_argument('--trade_month_size', type=int, default=settings.trade_month_size)
     parser.add_argument('--trade_recent_month_size', type=int, default=settings.trade_recent_month_size)
 
+    parser.add_argument('--similarity_size', type=int, default=settings.similarity_size)
+
     parser.add_argument('--save_path', type=str, default=settings.save_path)
     parser.add_argument('--correlation_path', type=str, default=settings.correlation_path)
     parser.add_argument('--trade_cd', type=str, choices=['t', 'c'], default=settings.trade_cd)
@@ -27,9 +30,31 @@ def get_args():
     return parser.parse_args()
 
 
+def make_apt_similarity_dataset(argument):
+    # pk_list = [pk for pk in query.get_apt_detail_list(argument.dataset_pk_size).fetchall()]
+    pk_list = [(1, 1)]
+
+    group = AptGroup()
+    for i, (_, apt_detail_pk) in enumerate(pk_list):
+        print('i : {} \t apt detail pk : {}'.format(i, apt_detail_pk))
+        similarity_ranking_detail_pk = group.apt_apt_similarity(
+            apt_detail_pk=apt_detail_pk,
+            trade_cd=argument.trade_cd,
+            limit_size=argument.similarity_size
+        )
+        similarity_str = ','.join([str(similarity_value) for similarity_value in similarity_ranking_detail_pk])
+
+        # Update DB
+        cursor.execute("""
+            INSERT INTO apt_similarity (pk_apt_detail, similarity)
+            VALUES (%s, %s);
+        """, params=(apt_detail_pk, similarity_str, ))
+        cnx.commit()
+
+
 def make_dataset(argument):
     query = GinAptQuery()
-    # pk_list = [pk for pk in query.get_apt_detail_list(argument.dataset_pk_size).fetchall()][:10]
+    # pk_list = [pk for pk in query.get_apt_detail_list(argument.dataset_pk_size).fetchall()]
     pk_list = [(1, 1)]
 
     total_data = []
@@ -107,7 +132,7 @@ def correlation_analysis(argument):
 if __name__ == '__main__':
     args = get_args()
 
-    make_dataset(args)
+    make_apt_similarity_dataset(args)
     # # making dataset
     # if args.make_dataset:
     #     make_dataset(args)

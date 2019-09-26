@@ -170,7 +170,7 @@ class AptPriceRegressionFeature(object):
         date_range = ','.join([date.strftime('"%Y-%m-%d"') for date in date_range])
 
         apt_similarity_list = self.query.get_similarity_apt_list(apt_detail_pk=self.apt_detail_pk).fetchone()[0]
-        apt_similarity_list = apt_similarity_list.split(',')[:10]
+        apt_similarity_list = apt_similarity_list.split(',')
 
         # floor level 추정(저층, 중층 고층)
         floor_level = AptFloorGroup.get_floor_level(
@@ -402,7 +402,7 @@ class AptPriceRegressionFeature(object):
         date_range = ','.join([date.strftime('"%Y%m"') for date in date_range])
 
         apt_similarity_list = self.query.get_similarity_apt_list(apt_detail_pk=self.apt_detail_pk).fetchone()[0]
-        apt_similarity_list = apt_similarity_list.split(',')[:10]
+        apt_similarity_list = apt_similarity_list.split(',')
 
         # floor level 추정(저층, 중층 고층)
         floor_level = AptFloorGroup.get_floor_level(

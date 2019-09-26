@@ -207,3 +207,27 @@ class GinAptQuery(object):
         """)
         cursor.execute(query, params=(apt_detail_pk, ))
         return cursor
+
+    @staticmethod
+    def get_nearest_3km_apt(apt_detail_pk: int):
+        query = ("""
+            SELECT
+               ROUND((6371*acos(cos(radians(b.latlngx))*cos(radians(a.latlngx))
+               *cos(radians(a.latlngy)-radians(b.latlngy))\
+               +sin(radians(b.latlngx))*sin(radians(a.latlngx)))) * 1000)  AS distance
+              , c.idx as pk_apt_detail
+            FROM apt_master a
+            CROSS JOIN apt_master b
+            INNER JOIN apt_detail c
+            ON c.master_idx = b.idx
+            WHERE a.idx = (select apt_detail.master_idx from apt_detail where apt_detail.idx=%s)
+              AND a.idx != b.idx
+              AND a.bldg_cd IN ('1')
+              AND b.bldg_cd IN ('1')
+              AND b.total_num_of_family >= 100  
+            HAVING distance <= 3000
+            ORDER BY distance;
+            ;
+        """)
+        cursor.execute(query, params=(apt_detail_pk, ))
+        return cursor
