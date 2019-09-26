@@ -44,6 +44,18 @@ class GinAptQuery(object):
         return cursor
 
     @staticmethod
+    def get_max_floor(apt_detail_pk: int):
+        query = ("""
+            SELECT b.max_jisang_floor
+            FROM apt_detail a
+            INNER JOIN apt_master b
+              ON a.master_idx = b.idx
+            WHERE a.idx = %s
+        """)
+        cursor.execute(query, params=(apt_detail_pk, ))
+        return cursor
+
+    @staticmethod
     def get_trade_price(apt_detail_pk: int, trade_cd: str):
         # 아파트의 매매, 전세/월세, 가격
         if trade_cd == 't':
@@ -89,11 +101,61 @@ class GinAptQuery(object):
         return cursor
 
     @staticmethod
+    def get_sale_price_with_floor_extent(apt_detail_pk, date_range, floor, trade_cd):
+        # 해당 아파트 층의 매물가격 리스트 출력
+        query = """                
+            SELECT c.pk_apt_detail, d.reg_date, d.floor, d.extent, d.price
+            FROM apt_detail a
+             INNER JOIN naver_apt_sale_detail_group c
+              ON a.idx = c.pk_apt_detail
+             INNER JOIN naver_apt_sale d
+              ON c.pk_naver_apt_master = d.idx
+             AND c.supply_extent = d.supply_extent
+             AND c.private_extent = d.extent
+            WHERE c.pk_apt_detail IN (%s)
+             AND d.reg_date IN (%s)
+             AND d.floor IN (%s)
+             AND d.use_yn = 'y'
+             AND d.trade_cd IN ("%s")
+           ORDER BY reg_date;
+        """ % (apt_detail_pk, date_range, floor, trade_cd)
+        cursor.execute(query)
+        return cursor
+
+    @staticmethod
     def get_trade_price_with_floor(apt_detail_pk, date_range, floor, trade_cd):
         if trade_cd == 't':
             query = """
                 SELECT pk_apt_trade, pk_apt_detail, deal_ymd, floor, t_amt 
                 FROM apt_trade
+                WHERE EXCEPT_YN='n'
+                  AND pk_apt_detail in (%s)
+                  AND floor in (%s)
+                  AND deal_ymd IN (%s)
+                ORDER BY deal_ymd;
+            """ % (apt_detail_pk, floor, date_range)
+        else:
+            # TODO : 코드 변경 필요!!
+            query = """
+                SELECT pk_apt_trade, pk_apt_detail, deal_ymd, floor, t_amt 
+                FROM apt_trade
+                WHERE EXCEPT_YN='n'
+                    AND pk_apt_detail=%s
+                    AND floor = %s
+                    AND deal_ymd IN (%s)
+                ORDER BY deal_ymd;
+            """ % (apt_detail_pk, floor, date_range)
+        cursor.execute(query)
+        return cursor
+
+    @staticmethod
+    def get_trade_price_with_floor_extent(apt_detail_pk, date_range, floor, trade_cd):
+        if trade_cd == 't':
+            query = """
+            SELECT pk_apt_trade, pk_apt_detail, deal_ymd, floor, apt_detail.extent, t_amt
+                FROM apt_trade
+                INNER JOIN apt_detail
+                  ON apt_detail.idx = apt_trade.pk_apt_detail
                 WHERE EXCEPT_YN='n'
                   AND pk_apt_detail in (%s)
                   AND floor in (%s)
@@ -134,4 +196,14 @@ class GinAptQuery(object):
             ORDER BY reg_date;
         """ % (apt_detail_pk, date_range, trade_cd)
         cursor.execute(query, params=())
+        return cursor
+
+    @staticmethod
+    def get_similarity_apt_list(apt_detail_pk):
+        query = ("""
+            SELECT similarity
+            FROM apt_similarity
+            WHERE idx = %s
+        """)
+        cursor.execute(query, params=(apt_detail_pk, ))
         return cursor

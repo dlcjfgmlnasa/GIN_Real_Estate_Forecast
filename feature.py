@@ -1,4 +1,5 @@
 # -*- coding:utf-8 -*-
+import settings
 import numpy as np
 import pandas as pd
 from datetime import datetime
@@ -8,31 +9,65 @@ from settings import db_cursor as cursor
 
 
 class AptFloorGroup(object):
-    # 같은 아파트의있는 층과 비슷한 아파트의 층을 Grouping 해주는 클래스
+    low_floor = 3
+
+    # 아파트 층과 관련된 클래스
     @staticmethod
     def get_similarity_apt_floor_list(apt_detail_pk: int, floor: str):
-        cursor.execute("""
-            SELECT b.max_jisang_floor
-            FROM apt_detail a
-            INNER JOIN apt_master b
-              ON a.master_idx = b.idx
-            WHERE a.idx = %s
-        """, params=(apt_detail_pk, ))
-        max_floor = cursor.fetchone()[0]
+        # 같은 아파트의있는 층과 비슷한 아파트의 층을 Grouping 해주는 함수
+        max_floor = GinAptQuery.get_max_floor(apt_detail_pk).fetchone()[0]
+        low_floor = AptFloorGroup.low_floor
 
-        low_floor = 3
         floor = int(floor)
 
         if floor <= low_floor:
             return list(range(-10, low_floor+1))
         else:
-            middle = int((max_floor - low_floor) * 0.8)     # 80% 중층 그 이상은 20%
-            middle_range = list(range(low_floor+1, middle+1))
-            high_range = list(range(middle+1, max_floor+1))
+            middle = int((max_floor - low_floor) * 0.8) + low_floor    # 80% 중층 그 이상은 20%
+            middle_range = range(low_floor+1, middle+1)
+            high_range = range(middle+1, max_floor+1)
             if floor in middle_range:
                 return middle_range
             if floor in high_range:
                 return high_range
+
+    @staticmethod
+    def get_floor_level(apt_detail_pk: int, floor: str):
+        # 해당 층의 level(low, middle, high) 을 출력해주는 함수
+        max_floor = GinAptQuery.get_max_floor(apt_detail_pk).fetchone()[0]
+        low_floor = AptFloorGroup.low_floor
+        
+        floor = int(floor)
+
+        # 80% 중층 그 이상은 20%
+        l_floor_range = range(-10, low_floor+1)
+        middle = int((max_floor - low_floor) * 0.8) + low_floor
+        
+        m_floor_range = range(low_floor+1, middle+1)
+        h_floor_range = range(middle+1, max_floor+1)
+
+        if floor in l_floor_range:
+            return 'low'
+        elif floor in m_floor_range:
+            return 'medium'
+        elif floor in h_floor_range:
+            return 'high'
+
+    @staticmethod
+    def get_floor_from_floor_level(apt_detail_pk: int, floor_lvl='low'):
+        # 해당 층의 level 에 맞는 floor 를 출력해주는 함수
+        max_floor = GinAptQuery.get_max_floor(apt_detail_pk).fetchone()[0]
+        low_floor = AptFloorGroup.low_floor
+
+        # 80% 중층 그 이상은 20%
+        middle = int((max_floor - low_floor) * 0.8) + low_floor
+
+        if floor_lvl == 'low':
+            return range(-10, low_floor+1)
+        elif floor_lvl == 'medium':
+            return range(low_floor+1, middle+1)
+        elif floor_lvl == 'high':
+            return range(middle+1, max_floor+1)
 
 
 class AptComplexGroup(object):
@@ -265,6 +300,76 @@ class AptPriceRegressionFeature(object):
             return df
         return pd.DataFrame()
 
+    def sale_price_with_similarity_apt_group(self, trg_date: datetime, month_size: int, floor: str) -> pd.DataFrame:
+        # 예측하고자하는 층의 이전 시간대의 [매물가격]을 이용한 feature
+        # 비슷한 아파트 건물 데이터를 같이 사용
+        # 비슷한 층수 데이터도 같이 사용
+
+        pre_date = trg_date - datedelta(months=month_size)
+        date_range = pd.date_range(pre_date, trg_date)
+        date_range = ','.join([date.strftime('"%Y-%m-%d"') for date in date_range])
+
+        apt_similarity_list = self.query.get_similarity_apt_list(apt_detail_pk=self.apt_detail_pk).fetchone()[0]
+        apt_similarity_list = apt_similarity_list.split(',')[:10]
+
+        # floor level 추정(저층, 중층 고층)
+        floor_level = AptFloorGroup.get_floor_level(
+            apt_detail_pk=self.apt_detail_pk,
+            floor=floor
+        )
+
+        similarity_data = {
+            pk: list(AptFloorGroup.get_floor_from_floor_level(pk, floor_level))
+            for pk in apt_similarity_list
+        }
+
+        total_df = []
+        for similarity_apt_detail_pk, similarity_floor_list in similarity_data.items():
+            if len(similarity_floor_list) == 0:
+                continue
+
+            df = pd.DataFrame(
+                self.query.get_sale_price_with_floor_extent(
+                    apt_detail_pk=similarity_apt_detail_pk,
+                    date_range=date_range,
+                    floor=','.join([str(floor) for floor in similarity_floor_list]),
+                    trade_cd=self.trade_cd
+                ),
+                columns=['apt_detail_pk', 'date', 'floor', 'extent', 'price']
+            )
+            df.price = df.price.astype(np.float)
+            df.extent = df.extent.astype(np.float)
+            df.price = df.price / df.extent
+            df = df.drop('extent', axis=1)
+
+            total_df.append(df)
+        total_df = pd.concat(total_df)
+
+        return total_df
+
+    def sale_price_with_similarity_apt_group_recent(self, trg_date: datetime, max_month_size: int,
+                                                    recent_month_size: int, floor: str) -> pd.DataFrame:
+        # 예측하고자하는 층의 이전 시간대의 [매물가격]을 이용한 feature
+        # 비슷한 아파트 건물 데이터를 같이 사용
+        # 비슷한 층수 데이터도 같이 사용
+        # 최근 데이터만 사용
+
+        df = self.sale_price_with_similarity_apt_group(
+            trg_date=trg_date,
+            month_size=max_month_size,
+            floor=floor
+        )
+
+        if len(df) != 0:
+            recent_price = df.iloc[-1:]
+            recent_date = list(recent_price.date)[0]
+            recent_pre_date = recent_date - datedelta(months=recent_month_size)
+
+            recent_date_range = pd.date_range(recent_pre_date, recent_date)
+            df = df[df.date.apply(lambda date: date in recent_date_range)]
+            return df
+        return pd.DataFrame()
+
     # ---------------------------------------------------------------------------------------------- #
     # 2. 매매 정보
     # ---------------------------------------------------------------------------------------------- #
@@ -416,6 +521,81 @@ class AptPriceRegressionFeature(object):
         )
 
         if len(df) != 0:
+            recent_date = datetime.strptime(list(df.iloc[-1:].date)[0], "%Y%m")
+            recent_pre_date = recent_date - datedelta(months=recent_month_size)
+
+            recent_date_range = pd.date_range(recent_pre_date, recent_date, freq='MS')
+            recent_date_range = [str(data.strftime("%Y%m")) for data in recent_date_range]
+
+            df = df[df.date.apply(lambda date: date in recent_date_range)]
+            return df
+        return pd.DataFrame()
+
+    def trade_price_with_similarity_apt_group(self, trg_date: datetime, month_size: int,
+                                              floor: str, trade_pk=None) -> pd.DataFrame:
+        # 예측하고자하는 층의 이전 시간대의 [매매가격]을 이용한 feature
+        # 비슷한 아파트 건물 데이터를 같이 사용
+        # 비슷한 층수 데이터도 같이 사용
+
+        pre_date = trg_date - datedelta(months=month_size)
+        date_range = pd.date_range(pre_date, trg_date, freq='MS')
+        date_range = ','.join([date.strftime('"%Y%m"') for date in date_range])
+
+        apt_similarity_list = self.query.get_similarity_apt_list(apt_detail_pk=self.apt_detail_pk).fetchone()[0]
+        apt_similarity_list = apt_similarity_list.split(',')[:10]
+
+        # floor level 추정(저층, 중층 고층)
+        floor_level = AptFloorGroup.get_floor_level(
+            apt_detail_pk=self.apt_detail_pk,
+            floor=floor
+        )
+
+        similarity_data = {
+            pk: list(AptFloorGroup.get_floor_from_floor_level(pk, floor_level))
+            for pk in apt_similarity_list
+        }
+
+        total_df = []
+        for similarity_apt_detail_pk, similarity_floor_list in similarity_data.items():
+            if len(similarity_floor_list) == 0:
+                continue
+            df = pd.DataFrame(
+                self.query.get_trade_price_with_floor_extent(
+                    apt_detail_pk=similarity_apt_detail_pk,
+                    date_range=date_range,
+                    floor=','.join([str(floor) for floor in similarity_floor_list]),
+                    trade_cd=self.trade_cd
+                ),
+                columns=['pk_apt_trade', 'apt_detail_pk', 'date', 'floor', 'extent', 'price']
+            )
+            df.price = df.price.astype(np.float)
+            df.extent = df.extent.astype(np.float)
+            df.price = df.price / df.extent
+            df = df.drop('extent', axis=1)
+
+            total_df.append(df)
+        total_df = pd.concat(total_df)
+
+        if trade_pk:
+            # Train 을 위해 trade_pk 값을 제외 시킴
+            total_df = total_df[total_df.pk_apt_trade != trade_pk]
+        return total_df
+
+    def trade_price_with_similarity_apt_group_recent(self, trg_date: datetime, max_month_size: int,
+                                                     recent_month_size: int, floor: str, trade_pk=None) -> pd.DataFrame:
+        # 예측하고자하는 층의 이전 시간대의 [매매가격]을 이용한 feature
+        # 비슷한 아파트 건물 데이터를 같이 사용
+        # 비슷한 층수 데이터도 같이 사용
+        # 최근 데이터만 사용
+
+        df = self.trade_price_with_similarity_apt_group(
+            trg_date=trg_date,
+            month_size=max_month_size,
+            floor=floor,
+            trade_pk=trade_pk
+        )
+
+        if len(df) != 0:
             recent_price = df.iloc[-1:]
             recent_date = datetime.strptime(list(recent_price.date)[0], '%Y%m')
             recent_pre_date = recent_date - datedelta(months=recent_month_size)
@@ -423,14 +603,13 @@ class AptPriceRegressionFeature(object):
             recent_date_range = [str(data.strftime("%Y%m")) for data in recent_date_range]
 
             df = df[df.date.apply(lambda date: date in recent_date_range)]
-            return df
         return df
 
 
 def make_feature(feature_name_list, apt_master_pk, apt_detail_pk, trade_cd,
                  trg_date, sale_month_size, sale_recent_month_size,
-                 trade_month_size, trade_recent_month_size,
-                 floor, extent, trade_pk=None):
+                 trade_month_size, trade_recent_month_size, floor, extent,
+                 trade_pk=None):
     feature = AptPriceRegressionFeature(
         apt_master_pk=apt_master_pk,
         apt_detail_pk=apt_detail_pk,
@@ -442,103 +621,86 @@ def make_feature(feature_name_list, apt_master_pk, apt_detail_pk, trade_cd,
         df = pd.DataFrame()
         if feature_name == 'sale_price_with_floor':
             df = feature.sale_price_with_floor(
-                trg_date=trg_date,
-                month_size=sale_month_size,
-                floor=floor,
-                extent=extent
+                trg_date=trg_date, month_size=sale_month_size,
+                floor=floor, extent=extent
             )
             if len(df) == 0:
                 return None
+
         elif feature_name == 'sale_price_with_floor_recent':
             df = feature.sale_price_with_floor_recent(
-                trg_date=trg_date,
-                max_month_size=sale_month_size,
-                recent_month_size=sale_recent_month_size,
-                floor=floor,
-                extent=extent
-            )
+                trg_date=trg_date, max_month_size=sale_month_size, recent_month_size=sale_recent_month_size,
+                floor=floor, extent=extent)
+
         elif feature_name == 'sale_price_with_floor_group':
             df = feature.sale_price_with_floor_group(
-                trg_date=trg_date,
-                month_size=sale_month_size,
-                floor=floor,
-                extent=extent
-            )
+                trg_date=trg_date, month_size=sale_month_size,
+                floor=floor, extent=extent)
+
         elif feature_name == 'sale_price_with_floor_group_recent':
-            df = feature.sale_price_with_floor_recent(
-                trg_date=trg_date,
-                max_month_size=sale_month_size,
-                recent_month_size=sale_recent_month_size,
-                floor=floor,
-                extent=extent
-            )
+            df = feature.sale_price_with_floor_group_recent(
+                trg_date=trg_date, max_month_size=sale_month_size, recent_month_size=sale_recent_month_size,
+                floor=floor, extent=extent)
+
         elif feature_name == 'sale_price_with_complex_group':
             df = feature.sale_price_with_complex_group(
-                trg_date=trg_date,
-                month_size=sale_month_size,
-                floor=floor,
-                extent=extent
-            )
+                trg_date=trg_date, month_size=sale_month_size,
+                floor=floor, extent=extent)
+
         elif feature_name == 'sale_price_with_complex_group_recent':
             df = feature.sale_price_with_complex_group_recent(
-                trg_date=trg_date,
-                max_month_size=sale_month_size,
-                recent_month_size=sale_recent_month_size,
-                floor=floor,
-                extent=extent
-            )
+                trg_date=trg_date, max_month_size=sale_month_size, recent_month_size=sale_recent_month_size,
+                floor=floor, extent=extent)
+
+        elif feature_name == 'sale_price_with_similarity_apt_group':
+            df = feature.sale_price_with_similarity_apt_group(
+                trg_date=trg_date, month_size=sale_recent_month_size,
+                floor=floor)
+
+        elif feature_name == 'sale_price_with_similarity_apt_group_recent':
+            df = feature.sale_price_with_similarity_apt_group_recent(
+                trg_date=trg_date, max_month_size=sale_month_size, recent_month_size=sale_recent_month_size,
+                floor=floor)
 
         elif feature_name == 'trade_price_with_floor':
             df = feature.trade_price_with_floor(
-                trg_date=trg_date,
-                month_size=trade_month_size,
-                floor=floor,
-                extent=extent,
-                trade_pk=trade_pk
-            )
+                trg_date=trg_date, month_size=trade_month_size,
+                floor=floor, extent=extent, trade_pk=trade_pk)
+
         elif feature_name == 'trade_price_with_floor_recent':
             df = feature.trade_price_with_floor_recent(
-                trg_date=trg_date,
-                max_month_size=trade_month_size,
-                recent_month_size=trade_recent_month_size,
-                floor=floor,
-                extent=extent,
-                trade_pk=trade_pk
-            )
+                trg_date=trg_date, max_month_size=trade_month_size, recent_month_size=trade_recent_month_size,
+                floor=floor, extent=extent, trade_pk=trade_pk)
+
         elif feature_name == 'trade_price_with_floor_group':
             df = feature.trade_price_with_floor_group(
-                trg_date=trg_date,
-                month_size=trade_month_size,
-                floor=floor,
-                extent=extent,
-                trade_pk=trade_pk
-            )
+                trg_date=trg_date, month_size=trade_month_size,
+                floor=floor, extent=extent, trade_pk=trade_pk)
+
         elif feature_name == 'trade_price_with_floor_group_recent':
             df = feature.trade_price_with_floor_group_recent(
-                trg_date=trg_date,
-                max_month_size=trade_month_size,
-                recent_month_size=trade_recent_month_size,
-                floor=floor,
-                extent=extent,
-                trade_pk=trade_pk
-            )
+                trg_date=trg_date, max_month_size=trade_month_size, recent_month_size=trade_recent_month_size,
+                floor=floor, extent=extent, trade_pk=trade_pk)
+
         elif feature_name == 'trade_price_with_complex_group':
             df = feature.trade_price_with_complex_group(
-                trg_date=trg_date,
-                month_size=trade_month_size,
-                floor=floor,
-                extent=extent,
-                trade_pk=trade_pk
-            )
+                trg_date=trg_date, month_size=trade_month_size,
+                floor=floor, extent=extent, trade_pk=trade_pk)
+
         elif feature_name == 'trade_price_with_complex_group_recent':
             df = feature.trade_price_with_complex_group_recent(
-                trg_date=trg_date,
-                max_month_size=trade_month_size,
-                recent_month_size=trade_recent_month_size,
-                floor=floor,
-                extent=extent,
-                trade_pk=trade_pk
-            )
+                trg_date=trg_date, max_month_size=trade_month_size, recent_month_size=trade_recent_month_size,
+                floor=floor, extent=extent, trade_pk=trade_pk)
+
+        elif feature_name == 'trade_price_with_similarity_apt_group':
+            df = feature.trade_price_with_similarity_apt_group(
+                trg_date=trg_date, month_size=trade_month_size,
+                floor=floor, trade_pk=trade_pk)
+
+        elif feature_name == 'trade_price_with_similarity_apt_group_recent':
+            df = feature.trade_price_with_similarity_apt_group_recent(
+                trg_date=trg_date, max_month_size=trade_month_size, recent_month_size=trade_recent_month_size,
+                floor=floor, trade_pk=trade_pk)
 
         if len(df) != 0:
             value = np.average(df.price)

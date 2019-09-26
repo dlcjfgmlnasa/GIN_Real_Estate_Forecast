@@ -13,7 +13,7 @@ from sklearn.externals import joblib
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--apt_detail_pk', type=int, default=2)
+    parser.add_argument('--apt_detail_pk', type=int, default=4)
     parser.add_argument('--features', type=list, default=settings.features)
     parser.add_argument('--sale_month_size', type=int, default=settings.sale_month_size)
     parser.add_argument('--sale_recent_month_size', type=int, default=settings.sale_recent_month_size)
@@ -74,9 +74,7 @@ def main(argument):
     result = {
         'predicate_price_max': np.max(predication),
         'predicate_price_min': np.min(predication),
-        'predicate_price_avg': np.average(predication),
-        'predicate_price_avg_+6%': np.average(predication) + (np.average(predication) * 0.06),
-        'predicate_price_avg_-6%': np.average(predication) - (np.average(predication) * 0.06)
+        'predicate_price_avg': np.average(predication)
     }
     print(result)
     return result
