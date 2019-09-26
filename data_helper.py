@@ -29,8 +29,8 @@ def get_args():
 
 def make_dataset(argument):
     query = GinAptQuery()
-    pk_list = [pk for pk in query.get_apt_detail_list(argument.dataset_pk_size).fetchall()]
-    # pk_list = [(1, 3)]
+    # pk_list = [pk for pk in query.get_apt_detail_list(argument.dataset_pk_size).fetchall()][:10]
+    pk_list = [(1, 1)]
 
     total_data = []
     for i, (apt_master_pk, apt_detail_pk) in enumerate(pk_list):
@@ -98,18 +98,20 @@ def correlation_analysis(argument):
         'feature': columns,
         'corr_value': correlation_list
     })
-
     print(correlation_df)
+
+    # Saving...
     correlation_df.to_csv(argument.correlation_path, index=False)
 
 
 if __name__ == '__main__':
     args = get_args()
 
-    # making dataset
-    if args.make_dataset:
-        make_dataset(args)
-
-    # calculation correlation
-    if args.correlation:
-        correlation_analysis(args)
+    make_dataset(args)
+    # # making dataset
+    # if args.make_dataset:
+    #     make_dataset(args)
+    #
+    # # calculation correlation
+    # if args.correlation:
+    #     correlation_analysis(args)
