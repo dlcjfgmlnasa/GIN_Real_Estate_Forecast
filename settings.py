@@ -27,8 +27,8 @@ sale_features = [
     'sale_price_with_floor_group_recent',
     'sale_price_with_complex_group',
     'sale_price_with_complex_group_recent',
-    'sale_price_with_similarity_apt_group',
-    'sale_price_with_similarity_apt_group_recent'
+    # 'sale_price_with_similarity_apt_group',
+    # 'sale_price_with_similarity_apt_group_recent'
 ]
 
 trade_features = [
@@ -39,12 +39,18 @@ trade_features = [
     'trade_price_with_floor_group_recent',
     'trade_price_with_complex_group',
     'trade_price_with_complex_group_recent'
-    'trade_price_with_similarity_apt_group',
-    'trade_price_with_similarity_apt_group_recent'
+    # 'trade_price_with_similarity_apt_group',
+    # 'trade_price_with_similarity_apt_group_recent'
+]
+
+training_volume_feature = [
+    # 거래량을 사용하는 feature
+    'training_volume_standard_area',
+    'training_volume_standard_year'
 ]
 
 # total_feature
-features = sale_features + trade_features
+features = sale_features + trade_features + training_volume_feature
 
 dataset_pk_size = 10000
 

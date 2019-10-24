@@ -30,7 +30,6 @@ class AptPriceRegressionFeature(object):
         pre_date = trg_date - datedelta(months=month_size)
         date_range = pd.date_range(pre_date, trg_date)
         date_range = ','.join([date.strftime('"%Y-%m-%d"') for date in date_range])
-
         df = pd.DataFrame(
             self.query.get_sale_price_with_floor(
                 apt_detail_pk=self.apt_detail_pk,
@@ -465,6 +464,90 @@ class AptPriceRegressionFeature(object):
             df = df[df.date.apply(lambda date: date in recent_date_range)]
         return df
 
+    # ---------------------------------------------------------------------------------------------- #
+    # 3. 거래량
+    # ---------------------------------------------------------------------------------------------- #
+    def training_volume_standard_area(self, trg_date: datetime, extent: float) -> float:
+        # 면적별 거래량을 바탕으로 한 [거래량] feature
+        trg_date = trg_date.strftime('%Y-%m') + '%'
+        cursor = GinAptQuery.get_training_volume_standard_area(
+            apt_detail_pk=self.apt_detail_pk,
+            trg_date=trg_date
+        )
+        df = pd.DataFrame(
+            cursor.fetchall(),
+            columns=['date',
+                     'area_20lt_trade_volume_cnt', 'area_20ge_30lt_trade_volume_cnt',
+                     'area_30ge_40lt_trade_volume_cnt', 'area_40ge_50lt_trade_volume_cnt', 'area_50ge_trade_volume_cnt',
+                     'standard_area_20lt_trade_volume_cnt', 'standard_area_20ge_30lt_trade_volume_cnt',
+                     'standard_area_30ge_40lt_trade_volume_cnt', 'standard_area_40ge_50lt_trade_volume_cnt',
+                     'standard_area_50ge_trade_volume_cnt']
+        ).sum()
+
+        try:
+            if extent < 20:
+                feature = df['area_20lt_trade_volume_cnt'] / df['standard_area_20lt_trade_volume_cnt']
+            elif 20 <= extent < 30:
+                feature = df['area_20ge_30lt_trade_volume_cnt'] / df['standard_area_20ge_30lt_trade_volume_cnt']
+            elif 30 <= extent < 40:
+                feature = df['area_30ge_40lt_trade_volume_cnt'] / df['standard_area_30ge_40lt_trade_volume_cnt']
+            elif 40 <= extent < 50:
+                feature = df['area_40ge_50lt_trade_volume_cnt'] / df['standard_area_40ge_50lt_trade_volume_cnt']
+            else:
+                feature = df['area_50ge_trade_volume_cnt'] / df['standard_area_50ge_trade_volume_cnt']
+        except ZeroDivisionError:
+            feature = 0
+        except KeyError:
+            feature = 0
+
+        if feature == np.inf:
+            feature = 0
+        feature = float(feature)
+        return feature
+
+    def training_volume_standard_year(self, trg_date: datetime) -> float:
+        cursor = settings.db_cursor
+        cursor.execute("""
+            SELECT gen_dt FROM GIN.apt_master
+            WHERE idx=%s
+        """, params=(self.apt_master_pk, ))
+
+        cur_build_year = int(trg_date.strftime('%Y'))
+        trg_build_year = int(cursor.fetchone()[0].split('.')[0])
+        build_year = cur_build_year - trg_build_year
+
+        cursor = GinAptQuery.get_training_volume_standard_year(self.apt_detail_pk, trg_date.strftime('%Y-%m')+'%')
+        df = pd.DataFrame(
+            cursor.fetchall(),
+            columns=['date',
+                     'year_05lt_trade_volume_cnt', 'year_05ge_10lt_trade_volume_cnt',
+                     'year_10ge_15lt_trade_volume_cnt', 'year_15ge_25lt_trade_volume_cnt', 'year_25ge_trade_volume_cnt',
+                     'standard_year_05lt_trade_volume_cnt', 'standard_year_05ge_10lt_trade_volume_cnt',
+                     'standard_year_10ge_15lt_trade_volume_cnt', 'standard_year_15ge_25lt_trade_volume_cnt',
+                     'standard_year_25ge_trade_volume_cnt']
+        ).sum()
+
+        try:
+            if build_year < 5:
+                feature = df['year_05lt_trade_volume_cnt'] / df['standard_year_05lt_trade_volume_cnt']
+            elif 5 <= build_year < 10:
+                feature = df['year_05ge_10lt_trade_volume_cnt'] / df['standard_year_05ge_10lt_trade_volume_cnt']
+            elif 10 <= build_year < 15:
+                feature = df['year_10ge_15lt_trade_volume_cnt'] / df['standard_year_10ge_15lt_trade_volume_cnt']
+            elif 15 <= build_year < 25:
+                feature = df['year_15ge_25lt_trade_volume_cnt'] / df['standard_year_15ge_25lt_trade_volume_cnt']
+            else:
+                feature = df['year_25ge_trade_volume_cnt'] / df['standard_year_25ge_trade_volume_cnt']
+        except ZeroDivisionError:
+            feature = 0
+        except KeyError:
+            feature = 0
+
+        if feature == np.inf:
+            feature = 0
+        feature = float(feature)
+        return feature
+
 
 def make_feature(feature_name_list, apt_master_pk, apt_detail_pk, trade_cd,
                  trg_date, sale_month_size, sale_recent_month_size,
@@ -562,7 +645,20 @@ def make_feature(feature_name_list, apt_master_pk, apt_detail_pk, trade_cd,
                 trg_date=trg_date, max_month_size=trade_month_size, recent_month_size=trade_recent_month_size,
                 floor=floor, trade_pk=trade_pk)
 
-        if len(df) != 0:
+        elif feature_name == 'training_volume_standard_area':
+            df = feature.training_volume_standard_area(
+                trg_date=trg_date, extent=extent
+            )
+
+        elif feature_name == 'training_volume_standard_year':
+            df = feature.training_volume_standard_year(
+                trg_date=trg_date
+            )
+
+        if feature_name in settings.training_volume_feature:
+            # 거래량 데이터를 위한 예외 처리
+            value = df
+        elif len(df) != 0:
             value = np.average(df.price)
         else:
             value = np.nan

@@ -231,3 +231,42 @@ class GinAptQuery(object):
         """)
         cursor.execute(query, params=(apt_detail_pk, ))
         return cursor
+
+    @staticmethod
+    def get_training_volume_standard_area(apt_detail_pk: int, trg_date: str):
+        query = ("""
+            SELECT yyyymmdd, area_20lt_trade_volume_cnt, area_20ge_30lt_trade_volume_cnt, 
+                   area_30ge_40lt_trade_volume_cnt, area_40ge_50lt_trade_volume_cnt, area_50ge_trade_volume_cnt,
+                   standard_area_20lt_trade_volume_cnt, standard_area_20ge_30lt_trade_volume_cnt, 
+                   standard_area_30ge_40lt_trade_volume_cnt, standard_area_40ge_50lt_trade_volume_cnt, 
+                   standard_area_50ge_trade_volume_cnt
+            FROM bi_volume
+            WHERE yyyymmdd like %s
+              AND lawd_cd = (
+                SELECT distinct lawd_cd
+                FROM apt_rtms_cnt
+                WHERE pk_apt_detail=%s
+              )
+        """)
+        cursor.execute(query, params=(trg_date, apt_detail_pk))
+
+        return cursor
+
+    @staticmethod
+    def get_training_volume_standard_year(apt_detail_pk: int, trg_date: str):
+        query = ("""
+            SELECT yyyymmdd, year_05lt_trade_volume_cnt, year_05ge_10lt_trade_volume_cnt,
+             year_10ge_15lt_trade_volume_cnt, year_15ge_25lt_trade_volume_cnt, year_25ge_trade_volume_cnt, 
+             standard_year_05lt_trade_volume_cnt, standard_year_05ge_10lt_trade_volume_cnt, 
+             standard_year_10ge_15lt_trade_volume_cnt, standard_year_15ge_25lt_trade_volume_cnt, 
+             standard_year_25ge_trade_volume_cnt
+            FROM bi_volume
+            WHERE yyyymmdd like %s
+              AND lawd_cd = (
+                SELECT distinct lawd_cd
+                FROM apt_rtms_cnt
+                WHERE pk_apt_detail=%s
+              )
+        """)
+        cursor.execute(query, params=(trg_date, apt_detail_pk))
+        return cursor

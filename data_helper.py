@@ -11,6 +11,7 @@ from feature import make_feature
 
 def get_args():
     parser = argparse.ArgumentParser()
+    parser.add_argument('--calc_similarity_apt', action='store_true')
     parser.add_argument('--make_dataset', action='store_true')
     parser.add_argument('--correlation', action='store_true')
 
@@ -54,8 +55,7 @@ def make_apt_similarity_dataset(argument):
 
 def make_dataset(argument):
     query = GinAptQuery()
-    # pk_list = [pk for pk in query.get_apt_detail_list(argument.dataset_pk_size).fetchall()]
-    pk_list = [(1, 1)]
+    pk_list = [pk for pk in query.get_apt_detail_list(argument.dataset_pk_size).fetchall()]
 
     total_data = []
     for i, (apt_master_pk, apt_detail_pk) in enumerate(pk_list):
@@ -74,6 +74,7 @@ def make_dataset(argument):
                                           trade_month_size=argument.trade_month_size,
                                           trade_recent_month_size=argument.trade_recent_month_size, floor=floor,
                                           extent=extent, trade_pk=trade_pk)
+
                 if feature_df is not None:
                     # if feature_df in NaN Ignore...
                     if feature_df.isna().any().any():
@@ -82,7 +83,6 @@ def make_dataset(argument):
                     feature_df['apt_detail_pk'] = apt_detail_pk
                     feature_df[argument.label_name] = price
                     total_data.append(feature_df)
-
         except KeyboardInterrupt:
             # file save
             break
@@ -132,11 +132,14 @@ def correlation_analysis(argument):
 if __name__ == '__main__':
     args = get_args()
 
-    make_apt_similarity_dataset(args)
-    # # making dataset
-    # if args.make_dataset:
-    #     make_dataset(args)
-    #
-    # # calculation correlation
-    # if args.correlation:
-    #     correlation_analysis(args)
+    # making dataset
+    if args.make_dataset:
+        make_dataset(args)
+
+    # calculation correlation
+    if args.correlation:
+        correlation_analysis(args)
+
+    # calculation similarity apt
+    if args.calc_similarity_apt:
+        make_apt_similarity_dataset(args)
