@@ -1,4 +1,5 @@
 # -*- coding:utf-8 -*-
+import os
 import settings
 import argparse
 import numpy as np
@@ -6,7 +7,7 @@ import pandas as pd
 from grouping import AptGroup
 from datetime import datetime
 from database import GinAptQuery, cursor, cnx
-from feature import make_feature
+from feature import make_feature, FeatureExistsError
 
 
 def get_args():
@@ -57,7 +58,11 @@ def make_dataset(argument):
     query = GinAptQuery()
     pk_list = [pk for pk in query.get_apt_detail_list(argument.dataset_pk_size).fetchall()]
 
-    total_data = []
+    total_data = {
+        settings.full_feature_model_name: [],
+        settings.sale_feature_model_name: [],
+        settings.trade_feature_model_name: []
+    }
     for i, (apt_master_pk, apt_detail_pk) in enumerate(pk_list):
         try:
             print('i : {} \t apt detail pk : {}'.format(i, apt_detail_pk))
@@ -67,33 +72,41 @@ def make_dataset(argument):
                 trg_date = datetime.strptime(trg_date, '%Y-%m-%d')
                 price = float(price / extent)
 
-                feature_df = make_feature(feature_name_list=argument.features, apt_master_pk=apt_master_pk,
-                                          apt_detail_pk=apt_detail_pk, trade_cd=argument.trade_cd, trg_date=trg_date,
-                                          sale_month_size=argument.sale_month_size,
-                                          sale_recent_month_size=argument.sale_recent_month_size,
-                                          trade_month_size=argument.trade_month_size,
-                                          trade_recent_month_size=argument.trade_recent_month_size, floor=floor,
-                                          extent=extent, trade_pk=trade_pk)
+                try:
+                    feature = make_feature(feature_name_list=argument.features, apt_master_pk=apt_master_pk,
+                                           apt_detail_pk=apt_detail_pk, trade_cd=argument.trade_cd, trg_date=trg_date,
+                                           sale_month_size=argument.sale_month_size,
+                                           sale_recent_month_size=argument.sale_recent_month_size,
+                                           trade_month_size=argument.trade_month_size,
+                                           trade_recent_month_size=argument.trade_recent_month_size, floor=floor,
+                                           extent=extent, trade_pk=trade_pk)
+                except FeatureExistsError:
+                    # 매매 혹은 매물 데이터를 바탕으로한 feature 하나도 존재하지 않을때...
+                    continue
+                except Exception as e:
+                    print(e)
+                    continue
 
-                if feature_df is not None:
-                    # if feature_df in NaN Ignore...
-                    if feature_df.isna().any().any():
-                        continue
+                feature_df = feature['data']
+                feature_df['apt_detail_pk'] = apt_detail_pk
+                feature_df[argument.label_name] = price
 
-                    feature_df['apt_detail_pk'] = apt_detail_pk
-                    feature_df[argument.label_name] = price
-                    total_data.append(feature_df)
+                status = feature['status']
+                total_data[status].append(feature_df)
         except KeyboardInterrupt:
-            # file save
+            # If KeyboardInterrupt file save...
             break
-        except Exception as e:
-            print(e)
+
+    # file save...
+    for status, feature_df in total_data.items():
+        if len(feature_df) == 0:
             continue
 
-    # file save
-    total_df = pd.concat(total_data)
-    total_df = total_df.reset_index(drop=True)
-    total_df.to_csv(argument.save_path, index=False)
+        filename = 'apt_dataset_{}.csv'.format(status)
+        filepath = os.path.join(argument.save_path, filename)
+        total_df = pd.concat(feature_df)
+        total_df = total_df.reset_index(drop=True)
+        total_df.to_csv(filepath, index=False)
 
 
 def correlation_analysis(argument):
