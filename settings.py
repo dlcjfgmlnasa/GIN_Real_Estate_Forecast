@@ -51,8 +51,9 @@ training_volume_feature = [
 
 # total_feature
 features = sale_features + trade_features + training_volume_feature
+# features = ['sum']
 
-dataset_pk_size = 10000
+dataset_pk_size = 1000
 
 sale_month_size = 6
 sale_recent_month_size = 2
@@ -62,8 +63,19 @@ trade_recent_month_size = 2
 similarity_size = 10
 
 # 2. model information parameter
-save_path = os.path.join('./dataset', 'apt_dataset.csv')
-model_path = os.path.join('./model', 'store', 'linear_regression.model')
+save_path = './dataset'
+full_feature_model_name = 'full'
+sale_feature_model_name = 'sale'
+trade_feature_model_name = 'trade'
+
+
+features_info = {
+    full_feature_model_name: features,
+    sale_feature_model_name: sale_features + training_volume_feature,
+    trade_feature_model_name: trade_features + training_volume_feature
+}
+
+model_path = os.path.join('./model', 'store')
 model_type = 'linear_regression'
 trade_cd = 't'
 label_name = 'price'
