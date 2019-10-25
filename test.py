@@ -13,7 +13,6 @@ from sklearn.model_selection import KFold
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset_path', type=str, default=settings.save_path)
-    parser.add_argument('--features', type=list, default=settings.features)
     parser.add_argument('--model', type=str, default=settings.model_type,
                         choices=[
                             'linear_regression',
@@ -27,7 +26,7 @@ def get_args():
     return parser.parse_args()
 
 
-def save_result(info, eval_result_list):
+def save_result(info, features, eval_result_list):
     # Calculation Evaluation Result
     total_evaluation = []
     for eval_result in eval_result_list:
@@ -47,7 +46,7 @@ def save_result(info, eval_result_list):
         total_evaluation.to_excel(writer, sheet_name='result', startcol=1, startrow=5)
         worksheet = writer.sheets['result']
         # model info save
-        worksheet.write(1, 1, 'features : {}'.format(', '.join(info.features)))
+        worksheet.write(1, 1, 'features : {}'.format(', '.join(features)))
         worksheet.write(2, 1, 'model : {}'.format(args.model))
         worksheet.write(3, 1, 'n_fold : {}'.format(args.n_fold))
         worksheet.set_column('B:G', 20)
@@ -125,9 +124,22 @@ def evaluation(real: np.ndarray, pred: np.ndarray, plot=True):
     }
 
 
+def main(arguments):
+    for model_name in [settings.full_feature_model_name, settings.trade_feature_model_name,
+                       settings.sale_feature_model_name]:
+        try:
+            filename = 'apt_dataset_{}.csv'.format(model_name)
+            filepath = os.path.join(arguments.dataset_path, filename)
+            df = pd.read_csv(filepath)
+
+            features = settings.features_info[model_name]
+            result = test(df[features], df[arguments.label_name], df.apt_detail_pk, arguments.model, args.n_fold,
+                          arguments.plot_flag)
+            save_result(arguments, features, result)
+        except FileNotFoundError:
+            pass
+
+
 if __name__ == '__main__':
     args = get_args()
-    df = pd.read_csv(args.dataset_path)
-    result = test(df[args.features], df[args.label_name], df.apt_detail_pk, args.model, args.n_fold, args.plot_flag)
-    save_result(args, result)
-
+    main(args)

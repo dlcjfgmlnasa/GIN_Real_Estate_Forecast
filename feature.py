@@ -567,8 +567,6 @@ def make_feature(feature_name_list, apt_master_pk, apt_detail_pk, trade_cd,
                 trg_date=trg_date, month_size=sale_month_size,
                 floor=floor, extent=extent
             )
-            if len(df) == 0:
-                return None
 
         elif feature_name == 'sale_price_with_floor_recent':
             df = feature.sale_price_with_floor_recent(
@@ -663,6 +661,42 @@ def make_feature(feature_name_list, apt_master_pk, apt_detail_pk, trade_cd,
         else:
             value = np.nan
         features.append(value)
-
     feature_df = pd.DataFrame([features], columns=feature_name_list)
-    return feature_df
+
+    # 매물 데이터 빈 데이터 추합
+    sale_feature_df = feature_df[settings.sale_features]
+    sale_feature_mean = float(sale_feature_df.dropna(axis=1).mean(axis=1))
+    sale_feature_df = sale_feature_df.fillna(sale_feature_mean)
+
+    # 매매 데이터 빈 데이터 추합
+    trade_feature_df = feature_df[settings.trade_features]
+    trade_feature_mean = float(trade_feature_df.dropna(axis=1).mean(axis=1))
+    trade_feature_df = trade_feature_df.fillna(trade_feature_mean, axis=0)
+
+    trade_volume_feature_df = feature_df[settings.training_volume_feature]
+
+    feature_df = pd.concat([sale_feature_df, trade_feature_df, trade_volume_feature_df], axis=1)
+
+    status = None
+    if not np.isnan(sale_feature_mean) and not np.isnan(trade_feature_mean):
+        status = settings.full_feature_model_name
+        feature_df = pd.concat([sale_feature_df, trade_feature_df, trade_volume_feature_df], axis=1)
+    elif not np.isnan(sale_feature_mean):
+        status = settings.sale_feature_model_name
+        feature_df = pd.concat([sale_feature_df, trade_volume_feature_df], axis=1)
+    elif not np.isnan(trade_feature_mean):
+        status = settings.trade_feature_model_name
+        feature_df = pd.concat([trade_feature_df, trade_volume_feature_df], axis=1)
+
+    if status is None:
+        raise FeatureExistsError()
+
+    return {
+        'status': status,
+        'data': feature_df
+    }
+
+
+class FeatureExistsError(Exception):
+    def __init__(self):
+        super().__init__('매매, 매물 데이터가 존재하지 않음')
