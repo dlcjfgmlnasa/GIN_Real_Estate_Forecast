@@ -2,3 +2,4 @@
 .idea/
 venv/
 model/store
+__pycache__/
