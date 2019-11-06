@@ -38,7 +38,6 @@ def main(arguments):
             filename = 'apt_dataset_{}.csv'.format(model_name)
             filepath = os.path.join(arguments.dataset_path, filename)
             df = pd.read_csv(filepath)
-
             features = settings.features_info[model_name]
 
             m = train(df[features], df[arguments.label_name], arguments.model)
