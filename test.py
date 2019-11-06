@@ -26,7 +26,7 @@ def get_args():
     return parser.parse_args()
 
 
-def save_result(info, features, eval_result_list):
+def save_result(file_path, features, eval_result_list):
     # Calculation Evaluation Result
     total_evaluation = []
     for eval_result in eval_result_list:
@@ -42,7 +42,7 @@ def save_result(info, features, eval_result_list):
     print(total_evaluation)
 
     # Save...
-    with pd.ExcelWriter(info.result_path, engine='xlsxwriter') as writer:
+    with pd.ExcelWriter(file_path, engine='xlsxwriter') as writer:
         total_evaluation.to_excel(writer, sheet_name='result', startcol=1, startrow=5)
         worksheet = writer.sheets['result']
         # model info save
@@ -128,6 +128,7 @@ def main(arguments):
     for model_name in [settings.full_feature_model_name, settings.trade_feature_model_name,
                        settings.sale_feature_model_name]:
         try:
+            print('Testing {}'.format(model_name))
             filename = 'apt_dataset_{}.csv'.format(model_name)
             filepath = os.path.join(arguments.dataset_path, filename)
             df = pd.read_csv(filepath)
@@ -135,7 +136,10 @@ def main(arguments):
             features = settings.features_info[model_name]
             result = test(df[features], df[arguments.label_name], df.apt_detail_pk, arguments.model, args.n_fold,
                           arguments.plot_flag)
-            save_result(arguments, features, result)
+            result_filepath = os.path.join(arguments.result_path, model_name+'.xlsx')
+            save_result(result_filepath, features, result)
+            print('Testing {} Complete'.format(model_name))
+            print('\n')
         except FileNotFoundError:
             pass
 
