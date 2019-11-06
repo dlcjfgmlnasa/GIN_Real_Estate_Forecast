@@ -51,9 +51,8 @@ training_volume_feature = [
 
 # total_feature
 features = sale_features + trade_features + training_volume_feature
-# features = ['sum']
 
-dataset_pk_size = 1000
+dataset_pk_size = 10000
 
 sale_month_size = 6
 sale_recent_month_size = 2
@@ -68,7 +67,6 @@ full_feature_model_name = 'full'
 sale_feature_model_name = 'sale'
 trade_feature_model_name = 'trade'
 
-
 features_info = {
     full_feature_model_name: features,
     sale_feature_model_name: sale_features + training_volume_feature,
@@ -80,16 +78,24 @@ model_type = 'linear_regression'
 trade_cd = 't'
 label_name = 'price'
 
+model_info = {
+    full_feature_model_name: os.path.join(model_path, full_feature_model_name+'.model'),
+    sale_feature_model_name: os.path.join(model_path, sale_feature_model_name+'.model'),
+    trade_feature_model_name: os.path.join(model_path, trade_feature_model_name+'.model')
+}
+
 # 3. Test Parameter
 n_fold = 10
 plot_flag = False
-test_result_path = os.path.join('./result', 'linear_regression', 'test01.xlsx')
+test_result_path = os.path.join('./result', 'linear_regression')
 
 # 4. Train Parameter
 
 # 5. Predicate Parameter
 current_date = datetime.datetime.now().strftime('%Y-%m-%d')
 predicate_previous_month_size = 5
+start_date = '2016-01-01'
+last_date = current_date
 
 # 6. Correlation
 correlation_path = os.path.join('./result', 'correlation.csv')

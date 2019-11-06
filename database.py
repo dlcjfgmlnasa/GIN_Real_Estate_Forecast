@@ -56,6 +56,54 @@ class GinAptQuery(object):
         return cursor
 
     @staticmethod
+    def get_trade_price_with_sql_date(apt_detail_pk: int, trade_cd: str,
+                                      date_sql: str):
+        # 아파트의 매매, 전세/월세, 가격
+        if trade_cd == 't':
+            # 아파트 매매가격 리스트 출력
+            query = """
+                SELECT apt_detail.master_idx, pk_apt_detail,  year, mon, real_day, floor, apt_detail.extent, t_amt
+                FROM apt_trade
+                INNER JOIN apt_detail
+                  ON apt_detail.idx = apt_trade.pk_apt_detail
+                WHERE EXCEPT_YN='n' AND pk_apt_detail=%s
+                AND (%s) 
+                ORDER BY deal_ymd;"""
+            query = query % (apt_detail_pk, date_sql)
+        elif trade_cd == 'd/r':
+            # TODO : 코드 변경 필요!!
+            # 아파트 전월세가격 리스트 출력
+            query = None
+        else:
+            raise NotImplemented()
+
+        cursor.execute(query, params=())
+        return cursor
+
+    @staticmethod
+    def get_trade_price_simple(apt_detail_pk: int, trade_cd: str):
+        # 아파트의 매매, 전세/월세, 가격
+        if trade_cd == 't':
+            # 아파트 매매가격 리스트 출력
+            query = ("""
+                SELECT year, mon, real_day, t_amt
+                FROM apt_trade
+                WHERE EXCEPT_YN='n' AND pk_apt_detail=%s
+                ORDER BY deal_ymd;""")
+        elif trade_cd == 'd/r':
+            # TODO : 코드 변경 필요!!
+            # 아파트 전월세가격 리스트 출력
+            query = ("""
+                SELECT pk_apt_trade, pk_apt_detail, year, mon, real_day, floor, deposit, mrent_amt
+                FROM apt_rent
+                WHERE EXCEPT_YN='n' AND pk_apt_detail=%s
+                ORDER BY deal_ymd;""")
+        else:
+            raise NotImplemented()
+        cursor.execute(query, params=(apt_detail_pk, ))
+        return cursor
+
+    @staticmethod
     def get_trade_price(apt_detail_pk: int, trade_cd: str):
         # 아파트의 매매, 전세/월세, 가격
         if trade_cd == 't':

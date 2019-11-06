@@ -693,7 +693,7 @@ def make_feature(feature_name_list, apt_master_pk, apt_detail_pk, trade_cd,
 
     return {
         'status': status,
-        'data': feature_df
+        'data': feature_df.fillna(0)
     }
 
 
