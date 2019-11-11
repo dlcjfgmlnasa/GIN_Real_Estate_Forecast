@@ -377,7 +377,7 @@ if __name__ == '__main__':
             break
 
     end_time = time.time()
-    print('\n총 걸린 시간 : {0:.2f}sec 총 예측 건물 수 : {1: } 예외 건물 수 : {2:}'.format(
+    print('\n총 걸린 시간 : {0:.2f}sec \t 총 예측 건물 수 : {1: } \t 예외 건물 수 : {2:}'.format(
         end_time - start_time, total_predicate_apt_count, total_except_predicate_apt_count
     ))
 
