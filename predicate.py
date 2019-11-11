@@ -201,6 +201,10 @@ def predicate(apt_detail_pk: int, models: dict, date=settings.current_date,
             predication_list.append(predication)
             break
 
+    # 예측에 필요한 매매, 매물 데이터가 전혀 존재하지 않을떄...
+    if len(predication_list) == 0:
+        raise FeatureExistsError()
+
     # Predication max, Predicate min, Predicate avg
     result = {
         'predicate_price_max': np.max(predication_list),
@@ -346,38 +350,3 @@ def predicate_full_range(apt_detail_pk: int, models: dict,
     save_plot_path = os.path.join(save_plot_path, str(apt_detail_pk) + '_1.png')
     plt.savefig(save_plot_path)
     plt.show()
-
-
-if __name__ == '__main__':
-    args = get_args()
-    apt_model = get_model(args.model_info)
-
-    start_time = time.time()
-    total_predicate_apt_count = 0
-    total_except_predicate_apt_count = 0
-
-    for i, apt_detail_pk in enumerate(GinAptQuery.get_predicate_apt_list().fetchall()):
-        apt_detail_pk = apt_detail_pk[0]
-        try:
-            start_time = time.time()
-            result = predicate(
-                apt_detail_pk=apt_detail_pk,
-                models=apt_model
-            )
-            end_time = time.time()
-            print('num: {0:} \t apt:{1:} \t time: {2:.2f}sec \t result: {3:}'.format(
-                i, apt_detail_pk, (end_time-start_time), result
-            ))
-            total_predicate_apt_count += 1
-
-        except FeatureExistsError:
-            print(f'apt:{apt_detail_pk} - 매매, 매물 데이터가 존재하지 않음')
-            total_except_predicate_apt_count += 1
-        except KeyboardInterrupt:
-            break
-
-    end_time = time.time()
-    print('\n총 걸린 시간 : {0:.2f}sec \t 총 예측 건물 수 : {1: } \t 예외 건물 수 : {2:}'.format(
-        end_time - start_time, total_predicate_apt_count, total_except_predicate_apt_count
-    ))
-
