@@ -96,15 +96,34 @@ def transform_range(values, range_values, t='max'):
     return predicate_values
 
 
-def select_trade_list(new_trade_list):
-    # 매매, 매물 데이터 리스트 중 일부 데이터 출력
-    new_trade_df = pd.DataFrame(
-        new_trade_list,
+def select_trade_list(trade_list):
+    # 매매, 매물 데이터 리스트 중 Selection
+    trade_df = pd.DataFrame(
+        trade_list,
         columns=['master_idx', 'pk_apt_detail', 'date', 'floor', 'extent', 'price']
     )
-    new_trade_list = list()
-    new_trade_list.append(new_trade_df[new_trade_df.price == new_trade_df.price.max()].values[0])
-    new_trade_list.append(new_trade_df[new_trade_df.price == new_trade_df.price.min()].values[0])
+
+    new_trade_list = []
+    for _, group in trade_df.groupby(['floor', 'extent', 'price']):
+        new_trade_list.append(group.iloc[-1:])
+    new_trade_df = pd.concat(new_trade_list)
+    new_trade_df = new_trade_df.sort_values('date')
+
+    new_trade_list = []
+    for _, group in new_trade_df.groupby(['floor', 'extent']):
+        standard_price = float(group[-1:].price)
+        standard_price_max = standard_price * (1 + settings.predicate_standard_price_rate)
+        standard_price_min = standard_price * (1 - settings.predicate_standard_price_rate)
+
+        group = group[group.price.apply(lambda price: standard_price_min <= price <= standard_price_max)]
+        price_mean = group.price.mean()
+        df = group.copy()
+        df.price = price_mean
+        new_trade_list.append(df.iloc[-1:])
+
+    new_trade_df = pd.concat(new_trade_list)
+    new_trade_df = new_trade_df.sort_values('date')
+    new_trade_list = new_trade_df.values
     return new_trade_list
 
 
@@ -151,8 +170,8 @@ def predicate(apt_detail_pk: int, models: dict, date=settings.current_date,
     if len(new_trade_list) == 0:
         raise FeatureExistsError()
 
-    # # 매매, 매물 데이터 리스트 중 일부 select
-    # new_trade_list = select_trade_list(new_trade_list)
+    # 매매, 매물 데이터 리스트 중 일부 select
+    new_trade_list = select_trade_list(new_trade_list)
 
     # making feature...
     total_feature = {
