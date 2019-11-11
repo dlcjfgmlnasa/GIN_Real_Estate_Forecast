@@ -5,6 +5,22 @@ from settings import db_cursor as cursor
 
 class GinAptQuery(object):
     @staticmethod
+    def get_predicate_apt_list():
+        # 예측할 아파트 단지 리스트 출력
+        query = ("""
+             SELECT b.idx pk_apt_detail
+              FROM apt_master a 
+             INNER JOIN apt_detail b 
+                ON a.idx = b.master_idx
+             WHERE a.total_num_of_family > 99
+               AND a.bldg_cd IN (1, 6)
+               AND b.NUM_OF_FAMILY > 29
+               ;
+        """)
+        cursor.execute(query)
+        return cursor
+
+    @staticmethod
     def get_apt_master_list():
         # 아파트 단지 리스트 출력
         query = ("""
