@@ -3,7 +3,7 @@ import time
 import argparse
 import settings
 from database import GinAptQuery
-from predicate import predicate, get_model, FeatureExistsError
+from predicate import predicate, get_model, FeatureExistsError, predicate_full_range
 
 
 def get_args():
