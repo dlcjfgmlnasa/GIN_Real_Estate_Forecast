@@ -353,6 +353,9 @@ if __name__ == '__main__':
     apt_model = get_model(args.model_info)
 
     start_time = time.time()
+    total_predicate_apt_count = 0
+    total_except_predicate_apt_count = 0
+
     for i, apt_detail_pk in enumerate(GinAptQuery.get_predicate_apt_list().fetchall()):
         apt_detail_pk = apt_detail_pk[0]
         try:
@@ -365,11 +368,16 @@ if __name__ == '__main__':
             print('num: {0:} \t apt:{1:} \t time: {2:.2f}sec \t result: {3:}'.format(
                 i, apt_detail_pk, (end_time-start_time), result
             ))
+            total_predicate_apt_count += 1
+
         except FeatureExistsError:
             print(f'apt:{apt_detail_pk} - 매매, 매물 데이터가 존재하지 않음')
+            total_except_predicate_apt_count += 1
         except KeyboardInterrupt:
             break
 
     end_time = time.time()
-    print('\n총 걸린 시간 : {0:.2f}sec'.format(end_time - start_time))
+    print('\n총 걸린 시간 : {0:.2f}sec 총 예측 건물 수 : {1: } 예외 건물 수 : {2:}'.format(
+        end_time - start_time, total_predicate_apt_count, total_except_predicate_apt_count
+    ))
 
