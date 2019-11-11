@@ -697,6 +697,196 @@ def make_feature(feature_name_list, apt_master_pk, apt_detail_pk, trade_cd,
     }
 
 
+def optimized_make_feature(feature_name_list, apt_master_pk, apt_detail_pk, trade_cd,
+                           trg_date, sale_month_size, sale_recent_month_size,
+                           trade_month_size, trade_recent_month_size, floor, extent,
+                           trade_pk=None):
+    # optimized feature engineering code
+    apt_complex_group_list = AptComplexGroup.get_similarity_apt_list(
+        apt_detail_pk=apt_detail_pk
+    )
+
+    floor_list = AptFloorGroup.get_similarity_apt_floor_list(
+        apt_detail_pk=apt_detail_pk,
+        floor=floor
+    )
+    # ------------------------------------------------------------------------------------ #
+    # 1. 매물 정보를 이용한 feature 생성
+    # ------------------------------------------------------------------------------------ #
+    sale_pre_date = trg_date - datedelta(months=sale_month_size)
+    sale_recent_pre_date = trg_date - datedelta(months=sale_recent_month_size)
+
+    sale_date_range = pd.date_range(sale_pre_date, trg_date)
+    sale_date_range = ','.join([date.strftime('"%Y-%m-%d"') for date in sale_date_range])
+    sale_recent_date_range = pd.date_range(sale_recent_pre_date, trg_date)
+
+    total_sale_df = pd.DataFrame(
+        GinAptQuery.get_sale_price_with_floor(
+            apt_detail_pk=','.join([str(apt) for apt in apt_complex_group_list]),
+            date_range=sale_date_range,
+            floor=','.join([str(floor) for floor in floor_list]),
+            trade_cd=trade_cd
+        ),
+        columns=['apt_detail_pk', 'date', 'floor', 'price']
+    )
+    total_sale_df.price = total_sale_df.price / extent
+    total_sale_df.price = total_sale_df.price.astype(np.float)
+
+    # 1-1) 매물 정보
+    sale_price_with_floor_df = total_sale_df[(total_sale_df.apt_detail_pk == apt_detail_pk)
+                                             & (total_sale_df.floor == floor)]
+    # 1-2) 매물 정보 with Recent
+    sale_price_with_floor_recent_df = sale_price_with_floor_df[
+        sale_price_with_floor_df.date.apply(lambda date: date in sale_recent_date_range)
+    ]
+
+    # 1-3) 매물 정보(+비슷한 층)
+    sale_price_with_floor_group_df = total_sale_df[(total_sale_df.apt_detail_pk == apt_detail_pk)]
+
+    # 1-4) 매물 정보(+비슷한 층) with Recent
+    sale_price_with_floor_group_recent_df = sale_price_with_floor_group_df[
+        sale_price_with_floor_group_df.date.apply(lambda date: date in sale_recent_date_range)
+    ]
+
+    # 1-5) 매물 정보(+비슷한 단지)
+    sale_price_with_complex_group_df = total_sale_df
+
+    # 1-6) 매물 정보(+비슷한 단지) with Recent
+    sale_price_with_complex_group_recent_df = sale_price_with_complex_group_df[
+        sale_price_with_complex_group_df.date.apply(lambda date: date in sale_recent_date_range)
+    ]
+
+    # ------------------------------------------------------------------------------------ #
+    # 2. 매매 정보를 이용한 feature 생성
+    # ------------------------------------------------------------------------------------ #
+    trade_pre_date = trg_date - datedelta(months=trade_month_size)
+    trade_recent_pre_date = trg_date - datedelta(months=trade_recent_month_size)
+
+    trade_date_range = pd.date_range(trade_pre_date, trg_date, freq='MS')
+    trade_date_range = ','.join([date.strftime('"%Y%m"') for date in trade_date_range])
+
+    trade_recent_date_range = pd.date_range(trade_recent_pre_date, trg_date, freq='MS')
+    trade_recent_date_range = [str(data.strftime("%Y%m")) for data in trade_recent_date_range]
+
+    total_trade_df = pd.DataFrame(
+        GinAptQuery.get_trade_price_with_floor(
+            apt_detail_pk=','.join([str(apt) for apt in apt_complex_group_list]),
+            date_range=trade_date_range,
+            floor=','.join([str(floor) for floor in floor_list]),
+            trade_cd=trade_cd
+        ),
+        columns=['pk_apt_trade', 'apt_detail_pk', 'date', 'floor', 'price']
+    )
+    if trade_pk:
+        # Train 을 위해 trade_pk 값은 제외 시킴
+        total_trade_df = total_trade_df[total_trade_df.pk_apt_trade.apply(lambda pk: pk != trade_pk)]
+
+    total_trade_df.price = total_trade_df.price / extent
+    total_trade_df.price = total_trade_df.price.astype(np.float)
+
+    # 2-1) 매매 정보
+    trade_price_with_floor_df = total_trade_df[(total_trade_df.apt_detail_pk == apt_detail_pk) &
+                                               (total_trade_df.floor == floor)]
+    # 2-2) 매매 정보 with Recent
+    trade_price_with_floor_recent_df = trade_price_with_floor_df[
+        trade_price_with_floor_df.date.apply(lambda date: date in trade_recent_date_range)
+    ]
+
+    # 2-3) 매매 정보(+비슷한 층)
+    trade_price_with_floor_group_df = total_trade_df[(total_trade_df.apt_detail_pk == apt_detail_pk)]
+
+    # 2-4) 매매 정보(+비슷한 층) with Recent
+    trade_price_with_floor_group_recent_df = trade_price_with_floor_group_df[
+        trade_price_with_floor_group_df.date.apply(lambda date: date in trade_recent_date_range)
+    ]
+
+    # 2-5) 매매 정보(+비슷한 단지)
+    trade_price_with_complex_group_df = total_trade_df
+
+    # 2-6) 매매 정보(+비슷한 단지) with Recent
+    trade_price_with_complex_group_recent_df = trade_price_with_complex_group_df[
+        trade_price_with_complex_group_df.date.apply(lambda date: date in trade_recent_date_range)
+    ]
+
+    # ------------------------------------------------------------------------------------ #
+    # 3. 거래량을 이용한 feature 생성
+    # ------------------------------------------------------------------------------------ #
+    feature = AptPriceRegressionFeature(
+        apt_master_pk=apt_master_pk,
+        apt_detail_pk=apt_detail_pk,
+        trade_cd=trade_cd
+    )
+    # 3-1) 면적별 거래량
+    training_volume_standard_area = feature.training_volume_standard_area(trg_date=trg_date, extent=extent)
+
+    # 3-2) 년도별 거래량
+    training_volume_standard_year = feature.training_volume_standard_year(trg_date=trg_date)
+
+    total_feature = {
+        'sale_price_with_floor': sale_price_with_floor_df,
+        'sale_price_with_floor_recent': sale_price_with_floor_recent_df,
+        'sale_price_with_floor_group': sale_price_with_floor_group_df,
+        'sale_price_with_floor_group_recent': sale_price_with_floor_group_recent_df,
+        'sale_price_with_complex_group': sale_price_with_complex_group_df,
+        'sale_price_with_complex_group_recent': sale_price_with_complex_group_recent_df,
+        'trade_price_with_floor': trade_price_with_floor_df,
+        'trade_price_with_floor_recent': trade_price_with_floor_recent_df,
+        'trade_price_with_floor_group': trade_price_with_floor_group_df,
+        'trade_price_with_floor_group_recent': trade_price_with_floor_group_recent_df,
+        'trade_price_with_complex_group': trade_price_with_complex_group_df,
+        'trade_price_with_complex_group_recent': trade_price_with_complex_group_recent_df,
+        'training_volume_standard_area': training_volume_standard_area,
+        'training_volume_standard_year': training_volume_standard_year
+    }
+    features = []
+    for feature_name, feature_df in total_feature.items():
+        if feature_name not in feature_name_list:
+            continue
+
+        if feature_name in settings.training_volume_feature:
+            value = feature_df
+        elif len(feature_df) != 0:
+            value = np.average(feature_df.price)
+        else:
+            value = np.nan
+        features.append(value)
+
+    feature_df = pd.DataFrame([features], columns=feature_name_list)
+
+    # 매물 데이터 빈 데이터 추합
+    sale_feature_df = feature_df[settings.sale_features]
+    sale_feature_mean = float(sale_feature_df.dropna(axis=1).mean(axis=1))
+    sale_feature_df = sale_feature_df.fillna(sale_feature_mean, axis=0)
+
+    # 매매 데이터 빈 데이터 추합
+    trade_feature_df = feature_df[settings.trade_features]
+    trade_feature_mean = float(trade_feature_df.dropna(axis=1).mean(axis=1))
+    trade_feature_df = trade_feature_df.fillna(trade_feature_mean, axis=0)
+
+    trade_volume_feature_df = feature_df[settings.training_volume_feature]
+
+    feature_df = pd.concat([sale_feature_df, trade_feature_df, trade_volume_feature_df], axis=1)
+
+    status = None
+    if not np.isnan(sale_feature_mean) and not np.isnan(trade_feature_mean):
+        status = settings.full_feature_model_name
+        feature_df = pd.concat([sale_feature_df, trade_feature_df, trade_volume_feature_df], axis=1)
+    elif not np.isnan(sale_feature_mean):
+        status = settings.sale_feature_model_name
+        feature_df = pd.concat([sale_feature_df, trade_volume_feature_df], axis=1)
+    elif not np.isnan(trade_feature_mean):
+        status = settings.trade_feature_model_name
+        feature_df = pd.concat([trade_feature_df, trade_volume_feature_df], axis=1)
+
+    if status is None:
+        raise FeatureExistsError()
+
+    return {
+        'status': status,
+        'data': feature_df.fillna(0)
+    }
+
+
 class FeatureExistsError(Exception):
     def __init__(self):
         super().__init__('매매, 매물 데이터가 존재하지 않음')

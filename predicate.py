@@ -8,7 +8,7 @@ import pandas as pd
 from datetime import datetime
 from datedelta import datedelta
 from database import GinAptQuery
-from feature import make_feature, FeatureExistsError
+from feature import make_feature, optimized_make_feature, FeatureExistsError
 from sklearn.externals import joblib
 import matplotlib.pyplot as plt
 import matplotlib.dates as dates
@@ -96,6 +96,18 @@ def transform_range(values, range_values, t='max'):
     return predicate_values
 
 
+def select_trade_list(new_trade_list):
+    # 매매, 매물 데이터 리스트 중 일부 데이터 출력
+    new_trade_df = pd.DataFrame(
+        new_trade_list,
+        columns=['master_idx', 'pk_apt_detail', 'date', 'floor', 'extent', 'price']
+    )
+    new_trade_list = list()
+    new_trade_list.append(new_trade_df[new_trade_df.price == new_trade_df.price.max()].values[0])
+    new_trade_list.append(new_trade_df[new_trade_df.price == new_trade_df.price.min()].values[0])
+    return new_trade_list
+
+
 def predicate(apt_detail_pk: int, models: dict, date=settings.current_date,
               feature_list=settings.features, previous_month_size=settings.predicate_previous_month_size,
               sale_month_size=settings.sale_month_size, sale_recent_month_size=settings.sale_recent_month_size,
@@ -139,6 +151,9 @@ def predicate(apt_detail_pk: int, models: dict, date=settings.current_date,
     if len(new_trade_list) == 0:
         raise FeatureExistsError()
 
+    # # 매매, 매물 데이터 리스트 중 일부 select
+    # new_trade_list = select_trade_list(new_trade_list)
+
     # making feature...
     total_feature = {
         settings.full_feature_model_name: [],
@@ -150,13 +165,20 @@ def predicate(apt_detail_pk: int, models: dict, date=settings.current_date,
         apt_extent = float(extent)
         floor = transformer_floor(apt_detail_pk, floor)
         try:
-            features = make_feature(feature_name_list=feature_list, apt_master_pk=apt_master_pk,
-                                    apt_detail_pk=apt_detail_pk, trade_cd=trade_cd, trg_date=date,
-                                    sale_month_size=sale_month_size,
-                                    sale_recent_month_size=sale_recent_month_size,
-                                    trade_month_size=trade_month_size,
-                                    trade_recent_month_size=trade_recent_month_size,
-                                    floor=floor, extent=extent)
+            features = optimized_make_feature(feature_name_list=feature_list, apt_master_pk=apt_master_pk,
+                                              apt_detail_pk=apt_detail_pk, trade_cd=trade_cd, trg_date=date,
+                                              sale_month_size=sale_month_size,
+                                              sale_recent_month_size=sale_recent_month_size,
+                                              trade_month_size=trade_month_size,
+                                              trade_recent_month_size=trade_recent_month_size,
+                                              floor=floor, extent=extent)
+            # features = make_feature(feature_name_list=feature_list, apt_master_pk=apt_master_pk,
+            #                         apt_detail_pk=apt_detail_pk, trade_cd=trade_cd, trg_date=date,
+            #                         sale_month_size=sale_month_size,
+            #                         sale_recent_month_size=sale_recent_month_size,
+            #                         trade_month_size=trade_month_size,
+            #                         trade_recent_month_size=trade_recent_month_size,
+            #                         floor=floor, extent=extent)
         except FeatureExistsError:
             # 매매 혹은 매물 데이터를 바탕으로한 feature 하나도 존재하지 않을때...
             continue
@@ -321,20 +343,25 @@ def predicate_full_range(apt_detail_pk: int, models: dict,
     plt.legend(loc='upper left')
 
     # Saving Image
-    save_plot_path = os.path.join(save_plot_path, str(apt_detail_pk) + '.png')
+    save_plot_path = os.path.join(save_plot_path, str(apt_detail_pk) + '_1.png')
     plt.savefig(save_plot_path)
-    # plt.show()
+    plt.show()
 
 
 if __name__ == '__main__':
     args = get_args()
     apt_model = get_model(args.model_info)
 
-    for i in range(6, 100000):
-        try:
-            predicate_full_range(
-                apt_detail_pk=i,
-                models=apt_model
-            )
-        except Exception as e:
-            pass
+    start_time = time.time()
+    result = predicate(
+        apt_detail_pk=1,
+        models=apt_model
+    )
+    end_time = time.time()
+    print(result)
+    print(end_time - start_time)
+    predicate_full_range(
+        apt_detail_pk=1,
+        models=apt_model
+    )
+

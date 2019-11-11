@@ -7,7 +7,7 @@ import pandas as pd
 from grouping import AptGroup
 from datetime import datetime
 from database import GinAptQuery, cursor, cnx
-from feature import make_feature, FeatureExistsError
+from feature import make_feature, optimized_make_feature, FeatureExistsError
 
 
 def get_args():
@@ -73,13 +73,21 @@ def make_dataset(argument):
                 price = float(price / extent)
 
                 try:
-                    feature = make_feature(feature_name_list=argument.features, apt_master_pk=apt_master_pk,
-                                           apt_detail_pk=apt_detail_pk, trade_cd=argument.trade_cd, trg_date=trg_date,
-                                           sale_month_size=argument.sale_month_size,
-                                           sale_recent_month_size=argument.sale_recent_month_size,
-                                           trade_month_size=argument.trade_month_size,
-                                           trade_recent_month_size=argument.trade_recent_month_size, floor=floor,
-                                           extent=extent, trade_pk=trade_pk)
+                    feature = optimized_make_feature(feature_name_list=argument.features, apt_master_pk=apt_master_pk,
+                                                     apt_detail_pk=apt_detail_pk, trade_cd=argument.trade_cd,
+                                                     trg_date=trg_date, sale_month_size=argument.sale_month_size,
+                                                     sale_recent_month_size=argument.sale_recent_month_size,
+                                                     trade_month_size=argument.trade_month_size,
+                                                     trade_recent_month_size=argument.trade_recent_month_size,
+                                                     floor=floor, extent=extent, trade_pk=trade_pk)
+
+                    # feature = make_feature(feature_name_list=argument.features, apt_master_pk=apt_master_pk,
+                    #                        apt_detail_pk=apt_detail_pk, trade_cd=argument.trade_cd, trg_date=trg_date,
+                    #                        sale_month_size=argument.sale_month_size,
+                    #                        sale_recent_month_size=argument.sale_recent_month_size,
+                    #                        trade_month_size=argument.trade_month_size,
+                    #                        trade_recent_month_size=argument.trade_recent_month_size, floor=floor,
+                    #                        extent=extent, trade_pk=trade_pk)
                 except FeatureExistsError:
                     # 매매 혹은 매물 데이터를 바탕으로한 feature 하나도 존재하지 않을때...
                     continue
@@ -144,6 +152,7 @@ def correlation_analysis(argument):
 
 if __name__ == '__main__':
     args = get_args()
+    make_dataset(args)
 
     # making dataset
     if args.make_dataset:
