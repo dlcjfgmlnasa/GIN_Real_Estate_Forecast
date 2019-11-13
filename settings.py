@@ -3,6 +3,9 @@ import os
 import datetime
 import mysql.connector
 from dotenv import load_dotenv
+import warnings
+
+warnings.filterwarnings("ignore")
 
 # env path
 env_path = os.path.join(os.path.dirname(__file__), '.env')

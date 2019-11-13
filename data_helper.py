@@ -56,7 +56,7 @@ def make_apt_similarity_dataset(argument):
 
 def make_dataset(argument):
     query = GinAptQuery()
-    pk_list = [pk for pk in query.get_apt_detail_list(argument.dataset_pk_size).fetchall()]
+    pk_list = [pk for pk in query.get_predicate_apt_list().fetchall()[:settings.dataset_pk_size]]
 
     total_data = {
         settings.full_feature_model_name: [],
@@ -152,7 +152,6 @@ def correlation_analysis(argument):
 
 if __name__ == '__main__':
     args = get_args()
-    make_dataset(args)
 
     # making dataset
     if args.make_dataset:
