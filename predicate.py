@@ -1,17 +1,44 @@
 # -*- coding:utf-8 -*-
+import os
 import time
+import argparse
 import settings
 import numpy as np
 import pandas as pd
 from datetime import datetime
 from datedelta import datedelta
 from database import GinAptQuery
-from feature import FeatureExistsError
 from sklearn.externals import joblib
+from feature import FeatureExistsError, optimized_make_feature, make_feature
 import matplotlib.pyplot as plt
 import matplotlib.dates as dates
 from pandas.plotting import register_matplotlib_converters
 register_matplotlib_converters()
+
+
+def get_args():
+    parser = argparse.ArgumentParser()
+    # target information
+    parser.add_argument('--full_pk', action='store_true')
+    parser.add_argument('--full_date', action='store_true')
+    parser.add_argument('--db_inject', action='store_true')
+    parser.add_argument('--evaluation', action='store_true')
+    parser.add_argument('--evaluation_plot', action='store_true')
+
+    parser.add_argument('--apt_detail_pk', type=int, default=3)
+    parser.add_argument('--date', default=datetime.now().strftime('%Y-%m-%d'))
+
+    # feature information
+    parser.add_argument('--feature_list', type=list, default=settings.features)
+    parser.add_argument('--sale_month_size', type=int, default=settings.sale_month_size)
+    parser.add_argument('--sale_recent_month_size', type=int, default=settings.sale_recent_month_size)
+    parser.add_argument('--trade_month_size', type=int, default=settings.trade_month_size)
+    parser.add_argument('--trade_recent_month_size', type=int, default=settings.trade_recent_month_size)
+    parser.add_argument('--model_info', type=str, default=settings.model_info)
+    parser.add_argument('--previous_month_size', type=int, default=settings.predicate_previous_month_size)
+    parser.add_argument('--feature_engine', type=str, default='optimizer', choices=['default', 'optimizer'])
+    parser.add_argument('--trade_cd', type=str, choices=['t', 'r'], default=settings.trade_cd)
+    return parser.parse_args()
 
 
 def get_month_range(trg_date: datetime, previous_month_size: int):
@@ -49,6 +76,7 @@ def get_model(model_info=settings.model_info):
 
 
 class AptPredicate(object):
+    # 아파트 예측을 위한 통합 클래스
     def __init__(self, apt_detail_pk, models, feature_engine,
                  feature_list=settings.features, previous_month_size=settings.predicate_previous_month_size,
                  sale_month_size=settings.sale_month_size, sale_recent_month_size=settings.sale_recent_month_size,
@@ -105,7 +133,7 @@ class AptPredicate(object):
             raise FeatureExistsError()
 
         # 매매, 매물 데이터 리스트 중 일부 select
-        new_trade_list = self.__select_trade_list__(new_trade_list)
+        new_trade_list = self.__select_trade_list(new_trade_list)
 
         # making feature...
         total_feature = {
@@ -240,14 +268,14 @@ class AptPredicate(object):
         predicate_price_min_range = df.predicate_price_avg.values * (1 - 0.06)
 
         # transform range
-        df['predicate_price_max'] = self.__transform_range__(df.predicate_price_max.values,
-                                                             predicate_price_max_range, t='max')
-        df['predicate_price_min'] = self.__transform_range__(df.predicate_price_min.values,
-                                                             predicate_price_min_range, t='min')
+        df['predicate_price_max'] = self.__transform_range(df.predicate_price_max.values,
+                                                           predicate_price_max_range, t='max')
+        df['predicate_price_min'] = self.__transform_range(df.predicate_price_min.values,
+                                                           predicate_price_min_range, t='min')
         # smoothing
-        df['predicate_price_max'] = self.__smooth_triangle__(df['predicate_price_max'].values, 60)
-        df['predicate_price_avg'] = self.__smooth_triangle__(df['predicate_price_avg'].values, 60)
-        df['predicate_price_min'] = self.__smooth_triangle__(df['predicate_price_min'].values, 60)
+        df['predicate_price_max'] = self.__smooth_triangle(df['predicate_price_max'].values, 60)
+        df['predicate_price_avg'] = self.__smooth_triangle(df['predicate_price_avg'].values, 60)
+        df['predicate_price_min'] = self.__smooth_triangle(df['predicate_price_min'].values, 60)
         return df
 
     def predicate_full_evaluation(self, plot=True):
@@ -292,7 +320,7 @@ class AptPredicate(object):
         return accuracy
 
     @staticmethod
-    def __transform_range__(values, range_values, t='max'):
+    def __transform_range(values, range_values, t='max'):
         predicate_values = []
         for smoothing_value, range_value in zip(values, range_values):
             if t == 'max':
@@ -308,7 +336,7 @@ class AptPredicate(object):
         return predicate_values
 
     @staticmethod
-    def __smooth_triangle__(data, degree):
+    def __smooth_triangle(data, degree):
         triangle = np.concatenate((np.arange(degree + 1), np.arange(degree)[::-1]))
         smoothed = []
 
@@ -322,7 +350,7 @@ class AptPredicate(object):
         return smoothed
 
     @staticmethod
-    def __select_trade_list__(trade_list):
+    def __select_trade_list(trade_list):
         # 매매, 매물 데이터 리스트 중 Selection
         trade_df = pd.DataFrame(
             trade_list,
@@ -351,3 +379,140 @@ class AptPredicate(object):
         new_trade_df = new_trade_df.sort_values('date')
         new_trade_list = new_trade_df.values
         return new_trade_list
+
+
+def get_feature_engine(name):
+    if name == 'default':
+        return make_feature
+    elif name == 'optimizer':
+        return optimized_make_feature
+    else:
+        raise NotImplemented()
+
+
+if __name__ == '__main__':
+    argument = get_args()                               # Get arguments
+
+    f_e = get_feature_engine(argument.feature_engine)   # Get feature engine
+    m = get_model(argument.model_info)                  # Get model (full.model, sale.model, trade.model)
+
+    pk_list = [pk[0] for pk in GinAptQuery.get_predicate_apt_list().fetchall()]
+
+    if argument.full_pk and argument.full_date:
+        # [전체 아파트 리스트]를 [처음부터 끝]까지 아파트 가격 예측
+        for detail_pk in pk_list:
+            try:
+                regression = AptPredicate(apt_detail_pk=detail_pk, models=m,
+                                          feature_engine=f_e, feature_list=argument.feature_list,
+                                          previous_month_size=argument.previous_month_size,
+                                          sale_month_size=argument.sale_month_size,
+                                          sale_recent_month_size=argument.sale_recent_month_size,
+                                          trade_month_size=argument.trade_month_size,
+                                          trade_recent_month_size=argument.trade_recent_month_size,
+                                          trade_cd=argument.trade_cd)
+                _result_df = regression.predicate_full()
+                _result_df_smooth = regression.predicate_transform_range(_result_df)
+                print(_result_df_smooth)
+
+                # Database injection
+                if argument.db_inject:
+                    # TODO: Database Injection
+                    pass
+            except FeatureExistsError:
+                pass
+
+    elif argument.full_pk:
+        # [전체 아파트 리스트]를 [지정한 날짜]의 아파트 가격 예측
+        for detail_pk in pk_list:
+            try:
+                regression = AptPredicate(apt_detail_pk=detail_pk, models=m,
+                                          feature_engine=f_e, feature_list=argument.feature_list,
+                                          previous_month_size=argument.previous_month_size,
+                                          sale_month_size=argument.sale_month_size,
+                                          sale_recent_month_size=argument.sale_recent_month_size,
+                                          trade_month_size=argument.trade_month_size,
+                                          trade_recent_month_size=argument.trade_recent_month_size,
+                                          trade_cd=argument.trade_cd)
+                _result = regression.predicate(date=argument.date)
+                print('price_min : {0:.4f}   price_avg : {1:.4f}   price_max : {2:.4f}'.format(
+                    _result['predicate_price_min'], _result['predicate_price_avg'], _result['predicate_price_max']
+                ))
+
+                # Database injection
+                if argument.db_inject:
+                    # TODO: Database Injection
+                    pass
+
+            except FeatureExistsError:
+                pass
+
+    elif argument.full_date and argument.apt_detail_pk:
+        # [apt_detail_pk]의 [처음부터 끝]까지 아파트 가격 예측
+        regression = AptPredicate(apt_detail_pk=argument.apt_detail_pk, models=m,
+                                  feature_engine=f_e, feature_list=argument.feature_list,
+                                  previous_month_size=argument.previous_month_size,
+                                  sale_month_size=argument.sale_month_size,
+                                  sale_recent_month_size=argument.sale_recent_month_size,
+                                  trade_month_size=argument.trade_month_size,
+                                  trade_recent_month_size=argument.trade_recent_month_size,
+                                  trade_cd=argument.trade_cd)
+        # TODO : Test Code
+        _result_df = pd.read_csv('test.csv')
+        del _result_df['Unnamed: 0']
+        del _result_df['real_price']
+        _result_df['apt_detail_pk'] = argument.apt_detail_pk
+        _result_df_smooth = regression.predicate_transform_range(_result_df)
+        _result_df_smooth['apt_detail_pk'] = argument.apt_detail_pk
+
+        # _result_df = regression.predicate_full()
+        # _result_df.to_csv('test.csv')
+        # _result_df_smooth = regression.predicate_transform_range(_result_df)
+        # print(_result_df_smooth)
+
+        # Database injection
+        if argument.db_inject:
+            # TODO: Database Injection
+            print(_result_df)
+            print(_result_df_smooth)
+            pass
+
+    elif argument.evaluation:
+        # [apt_detail_pk]의 [evaluation]
+        regression = AptPredicate(apt_detail_pk=argument.apt_detail_pk, models=m,
+                                  feature_engine=f_e, feature_list=argument.feature_list,
+                                  previous_month_size=argument.previous_month_size,
+                                  sale_month_size=argument.sale_month_size,
+                                  sale_recent_month_size=argument.sale_recent_month_size,
+                                  trade_month_size=argument.trade_month_size,
+                                  trade_recent_month_size=argument.trade_recent_month_size,
+                                  trade_cd=argument.trade_cd)
+        _result = regression.predicate_full_evaluation(plot=argument.evaluation_plot)
+        print(_result)
+
+        if argument.evaluation_plot:
+            image_name = '{}.png'.format(argument.apt_detail_pk)
+            image_path = os.path.join(settings.image_path, image_name)
+            _result, img = _result
+            print(_result)
+            img.savefig(image_path)     # Saving Image
+            img.show()
+
+    else:
+        # [apt_detail_pk]의 [지정한 날짜]의 아파트 가격 예측
+        regression = AptPredicate(apt_detail_pk=argument.apt_detail_pk, models=m,
+                                  feature_engine=f_e, feature_list=argument.feature_list,
+                                  previous_month_size=argument.previous_month_size,
+                                  sale_month_size=argument.sale_month_size,
+                                  sale_recent_month_size=argument.sale_recent_month_size,
+                                  trade_month_size=argument.trade_month_size,
+                                  trade_recent_month_size=argument.trade_recent_month_size,
+                                  trade_cd=argument.trade_cd)
+        _result = regression.predicate(date=argument.date)
+        print('price_min : {0:.4f}   price_avg : {1:.4f}   price_max : {2:.4f}'.format(
+            _result['predicate_price_min'], _result['predicate_price_avg'], _result['predicate_price_max']
+        ))
+
+        # Database injection
+        if argument.db_inject:
+            # TODO: Database Injection
+            pass
