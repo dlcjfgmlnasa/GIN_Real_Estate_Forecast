@@ -96,7 +96,7 @@ test_result_path = os.path.join('./result', 'linear_regression')
 
 # 5. Predicate Parameter
 current_date = datetime.datetime.now().strftime('%Y-%m-%d')
-predicate_previous_month_size = 6
+predicate_previous_month_size = 5
 predicate_standard_price_rate = 0.05
 start_date = '2016-01-01'
 last_date = current_date
