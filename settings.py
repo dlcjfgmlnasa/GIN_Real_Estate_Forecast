@@ -76,6 +76,7 @@ features_info = {
     trade_feature_model_name: trade_features + training_volume_feature
 }
 
+image_path = os.path.join('./result', 'img')
 model_path = os.path.join('./model', 'store')
 model_type = 'linear_regression'
 trade_cd = 't'
