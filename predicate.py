@@ -444,7 +444,7 @@ if __name__ == '__main__':
     f_e = get_feature_engine(argument.feature_engine)   # Get feature engine
     m = get_model(argument.model_info)                  # Get model (full.model, sale.model, trade.model)
 
-    pk_list = [pk[0] for pk in GinAptQuery.get_predicate_apt_list().fetchall()]
+    pk_list = [pk[1] for pk in GinAptQuery.get_predicate_apt_list().fetchall()]
 
     def formatting_df(_df, columns, _apt_detail_pk):
         # formatting pandas frame for inject database
