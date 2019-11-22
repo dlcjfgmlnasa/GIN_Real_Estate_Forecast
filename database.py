@@ -8,7 +8,7 @@ class GinAptQuery(object):
     def get_predicate_apt_list():
         # 예측할 아파트 단지 리스트 출력
         query = ("""
-             SELECT b.idx pk_apt_detail
+             SELECT a.idx, b.idx
               FROM apt_master a 
              INNER JOIN apt_detail b 
                 ON a.idx = b.master_idx
