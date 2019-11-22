@@ -33,8 +33,7 @@ def get_args():
 
 
 def make_apt_similarity_dataset(argument):
-    # pk_list = [pk for pk in query.get_apt_detail_list(argument.dataset_pk_size).fetchall()]
-    pk_list = [(1, 1)]
+    pk_list = [pk for pk in GinAptQuery.get_predicate_apt_list().fetchall()]
 
     group = AptGroup()
     for i, (_, apt_detail_pk) in enumerate(pk_list):
@@ -56,7 +55,7 @@ def make_apt_similarity_dataset(argument):
 
 def make_dataset(argument):
     query = GinAptQuery()
-    pk_list = [pk for pk in query.get_predicate_apt_list().fetchall()[:settings.dataset_pk_size]]
+    pk_list = [pk for pk in query.get_predicate_apt_list().fetchall()]
 
     total_data = {
         settings.full_feature_model_name: [],
