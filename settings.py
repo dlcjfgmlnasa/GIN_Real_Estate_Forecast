@@ -46,14 +46,14 @@ trade_features = [
     # 'trade_price_with_similarity_apt_group_recent'
 ]
 
-training_volume_feature = [
+trade_volume_feature = [
     # 거래량을 사용하는 feature
-    'training_volume_standard_area',
-    'training_volume_standard_year'
+    'trade_volume_standard_area',
+    'trade_volume_standard_year'
 ]
 
 # total_feature
-features = sale_features + trade_features + training_volume_feature
+features = sale_features + trade_features + trade_volume_feature
 
 dataset_pk_size = 10000
 
@@ -72,8 +72,8 @@ trade_feature_model_name = 'trade'
 
 features_info = {
     full_feature_model_name: features,
-    sale_feature_model_name: sale_features + training_volume_feature,
-    trade_feature_model_name: trade_features + training_volume_feature
+    sale_feature_model_name: sale_features + trade_volume_feature,
+    trade_feature_model_name: trade_features + trade_volume_feature
 }
 
 image_path = os.path.join('./result', 'img')
