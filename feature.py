@@ -643,17 +643,17 @@ def make_feature(feature_name_list, apt_master_pk, apt_detail_pk, trade_cd,
                 trg_date=trg_date, max_month_size=trade_month_size, recent_month_size=trade_recent_month_size,
                 floor=floor, trade_pk=trade_pk)
 
-        elif feature_name == 'training_volume_standard_area':
+        elif feature_name == 'trade_volume_standard_area':
             df = feature.training_volume_standard_area(
                 trg_date=trg_date, extent=extent
             )
 
-        elif feature_name == 'training_volume_standard_year':
+        elif feature_name == 'trade_volume_standard_year':
             df = feature.training_volume_standard_year(
                 trg_date=trg_date
             )
 
-        if feature_name in settings.training_volume_feature:
+        if feature_name in settings.trade_volume_feature:
             # 거래량 데이터를 위한 예외 처리
             value = df
         elif len(df) != 0:
@@ -673,7 +673,7 @@ def make_feature(feature_name_list, apt_master_pk, apt_detail_pk, trade_cd,
     trade_feature_mean = float(trade_feature_df.dropna(axis=1).mean(axis=1))
     trade_feature_df = trade_feature_df.fillna(trade_feature_mean, axis=0)
 
-    trade_volume_feature_df = feature_df[settings.training_volume_feature]
+    trade_volume_feature_df = feature_df[settings.trade_volume_feature]
 
     feature_df = pd.concat([sale_feature_df, trade_feature_df, trade_volume_feature_df], axis=1)
 
@@ -835,15 +835,15 @@ def optimized_make_feature(feature_name_list, apt_master_pk, apt_detail_pk, trad
         'trade_price_with_floor_group_recent': trade_price_with_floor_group_recent_df,
         'trade_price_with_complex_group': trade_price_with_complex_group_df,
         'trade_price_with_complex_group_recent': trade_price_with_complex_group_recent_df,
-        'training_volume_standard_area': training_volume_standard_area,
-        'training_volume_standard_year': training_volume_standard_year
+        'trade_volume_standard_area': training_volume_standard_area,
+        'trade_volume_standard_year': training_volume_standard_year
     }
     features = []
     for feature_name, feature_df in total_feature.items():
         if feature_name not in feature_name_list:
             continue
 
-        if feature_name in settings.training_volume_feature:
+        if feature_name in settings.trade_volume_feature:
             value = feature_df
         elif len(feature_df) != 0:
             value = np.average(feature_df.price)
@@ -863,7 +863,7 @@ def optimized_make_feature(feature_name_list, apt_master_pk, apt_detail_pk, trad
     trade_feature_mean = float(trade_feature_df.dropna(axis=1).mean(axis=1))
     trade_feature_df = trade_feature_df.fillna(trade_feature_mean, axis=0)
 
-    trade_volume_feature_df = feature_df[settings.training_volume_feature]
+    trade_volume_feature_df = feature_df[settings.trade_volume_feature]
 
     feature_df = pd.concat([sale_feature_df, trade_feature_df, trade_volume_feature_df], axis=1)
 
