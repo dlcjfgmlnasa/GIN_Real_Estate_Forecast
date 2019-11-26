@@ -123,15 +123,15 @@ class AptPriceRegressionFeature(object):
         )
 
         df = pd.DataFrame(
-            self.query.get_sale_price_with_floor(
+            self.query.get_sale_price_with_floor_extent(
                 apt_detail_pk=','.join([str(apt) for apt in self.apt_complex_group_list]),
                 date_range=date_range,
                 floor=','.join([str(floor) for floor in floor_list]),
                 trade_cd=self.trade_cd
             ),
-            columns=['apt_detail_pk', 'date', 'floor', 'price']
+            columns=['apt_detail_pk', 'date', 'floor', 'extent', 'price']
         )
-        df.price = df.price / extent
+        df.price = df.price / df.extent
         df.price = df.price.astype(np.float)
         return df
 
@@ -345,15 +345,15 @@ class AptPriceRegressionFeature(object):
         )
 
         df = pd.DataFrame(
-            self.query.get_trade_price_with_floor(
+            self.query.get_trade_price_with_floor_extent(
                 apt_detail_pk=','.join([str(apt) for apt in self.apt_complex_group_list]),
                 date_range=date_range,
                 floor=','.join([str(floor) for floor in floor_list]),
                 trade_cd=self.trade_cd
             ),
-            columns=['pk_apt_trade', 'apt_detail_pk', 'date', 'floor', 'price']
+            columns=['pk_apt_trade', 'apt_detail_pk', 'date', 'floor', 'extent', 'price']
         )
-        df.price = df.price / extent
+        df.price = df.price / df.extent
         df.price = df.price.astype(np.float)
 
         if trade_pk:
@@ -721,15 +721,15 @@ def optimized_make_feature(feature_name_list, apt_master_pk, apt_detail_pk, trad
     sale_recent_date_range = pd.date_range(sale_recent_pre_date, trg_date)
 
     total_sale_df = pd.DataFrame(
-        GinAptQuery.get_sale_price_with_floor(
+        GinAptQuery.get_sale_price_with_floor_extent(
             apt_detail_pk=','.join([str(apt) for apt in apt_complex_group_list]),
             date_range=sale_date_range,
             floor=','.join([str(floor) for floor in floor_list]),
             trade_cd=trade_cd
         ),
-        columns=['apt_detail_pk', 'date', 'floor', 'price']
+        columns=['apt_detail_pk', 'date', 'floor', 'extent', 'price']
     )
-    total_sale_df.price = total_sale_df.price / extent
+    total_sale_df.price = total_sale_df.price / total_sale_df.extent
     total_sale_df.price = total_sale_df.price.astype(np.float)
 
     # 1-1) 매물 정보
@@ -769,19 +769,19 @@ def optimized_make_feature(feature_name_list, apt_master_pk, apt_detail_pk, trad
     trade_recent_date_range = [str(data.strftime("%Y%m")) for data in trade_recent_date_range]
 
     total_trade_df = pd.DataFrame(
-        GinAptQuery.get_trade_price_with_floor(
+        GinAptQuery.get_trade_price_with_floor_extent(
             apt_detail_pk=','.join([str(apt) for apt in apt_complex_group_list]),
             date_range=trade_date_range,
             floor=','.join([str(floor) for floor in floor_list]),
             trade_cd=trade_cd
         ),
-        columns=['pk_apt_trade', 'apt_detail_pk', 'date', 'floor', 'price']
+        columns=['pk_apt_trade', 'apt_detail_pk', 'date', 'floor', 'extent', 'price']
     )
     if trade_pk:
         # Train 을 위해 trade_pk 값은 제외 시킴
         total_trade_df = total_trade_df[total_trade_df.pk_apt_trade.apply(lambda pk: pk != trade_pk)]
 
-    total_trade_df.price = total_trade_df.price / extent
+    total_trade_df.price = total_trade_df.price / total_trade_df.extent
     total_trade_df.price = total_trade_df.price.astype(np.float)
 
     # 2-1) 매매 정보
