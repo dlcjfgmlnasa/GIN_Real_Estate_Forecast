@@ -280,7 +280,7 @@ class AptPredicate(object):
                 trg_date = str(trg_date).split('T')[0]
 
                 day = int(trg_date.split('-')[-1])
-                if i != 0 and i != len(df) - 1 and day not in [1, 10, 20, 30]:
+                if i != 0 and i != len(df) - 1 and day not in [1, 11, 21]:
                     predicate_price_avg.append(np.nan)
                     predicate_price_max.append(np.nan)
                     predicate_price_min.append(np.nan)
@@ -323,7 +323,7 @@ class AptPredicate(object):
             for trg_date in date_range:
                 trg_date = str(trg_date).split()[0]
                 day = int(trg_date.split('-')[-1])
-                if day in [1, 10, 20, 30]:
+                if day in [1, 11, 21]:
                     date_temp.append(trg_date)
                     # Predicate....
                     try:
