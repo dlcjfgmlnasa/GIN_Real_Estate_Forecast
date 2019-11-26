@@ -78,7 +78,7 @@ class GinAptQuery(object):
         if trade_cd == 't':
             # 아파트 매매가격 리스트 출력
             query = """
-                SELECT apt_detail.master_idx, pk_apt_detail,  year, mon, real_day, floor, apt_detail.extent, t_amt
+                SELECT apt_detail.master_idx, pk_apt_detail,  year, mon, day, floor, apt_detail.extent, t_amt
                 FROM apt_trade
                 INNER JOIN apt_detail
                   ON apt_detail.idx = apt_trade.pk_apt_detail
@@ -102,7 +102,7 @@ class GinAptQuery(object):
         if trade_cd == 't':
             # 아파트 매매가격 리스트 출력
             query = ("""
-                SELECT year, mon, real_day, t_amt
+                SELECT year, mon, day, t_amt
                 FROM apt_trade
                 WHERE EXCEPT_YN='n' AND pk_apt_detail=%s
                 ORDER BY deal_ymd;""")
@@ -110,7 +110,7 @@ class GinAptQuery(object):
             # TODO : 코드 변경 필요!!
             # 아파트 전월세가격 리스트 출력
             query = ("""
-                SELECT pk_apt_trade, pk_apt_detail, year, mon, real_day, floor, deposit, mrent_amt
+                SELECT pk_apt_trade, pk_apt_detail, year, mon, day, floor, deposit, mrent_amt
                 FROM apt_rent
                 WHERE EXCEPT_YN='n' AND pk_apt_detail=%s
                 ORDER BY deal_ymd;""")
@@ -125,7 +125,7 @@ class GinAptQuery(object):
         if trade_cd == 't':
             # 아파트 매매가격 리스트 출력
             query = ("""
-                SELECT pk_apt_trade, pk_apt_detail, year, mon, real_day, floor, extent, t_amt
+                SELECT pk_apt_trade, pk_apt_detail, year, mon, day, floor, extent, t_amt
                 FROM apt_trade
                 WHERE EXCEPT_YN='n' AND pk_apt_detail=%s
                 ORDER BY deal_ymd;""")
@@ -133,7 +133,7 @@ class GinAptQuery(object):
             # TODO : 코드 변경 필요!!
             # 아파트 전월세가격 리스트 출력
             query = ("""
-                SELECT pk_apt_trade, pk_apt_detail, year, mon, real_day, floor, deposit, mrent_amt
+                SELECT pk_apt_trade, pk_apt_detail, year, mon, day, floor, deposit, mrent_amt
                 FROM apt_rent
                 WHERE EXCEPT_YN='n' AND pk_apt_detail=%s
                 ORDER BY deal_ymd;""")
