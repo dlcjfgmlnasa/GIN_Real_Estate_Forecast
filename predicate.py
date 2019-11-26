@@ -20,25 +20,75 @@ register_matplotlib_converters()
 def get_args():
     parser = argparse.ArgumentParser()
     # target information
-    parser.add_argument('--full_pk', action='store_true')
-    parser.add_argument('--full_date', action='store_true')
-    parser.add_argument('--db_inject', action='store_true')
-    parser.add_argument('--evaluation', action='store_true')
-    parser.add_argument('--evaluation_plot', action='store_true')
+    parser.add_argument('--full_pk', action='store_true',
+                        help='대상 아파트 전체 예측')
 
-    parser.add_argument('--apt_detail_pk', action='store', type=int)
-    parser.add_argument('--date', action='store', type=str, default=datetime.now().strftime('%Y-%m-%d'))
+    parser.add_argument('--full_date', action='store_true',
+                        help='2006년도부터 현재까지 예측')
+
+    parser.add_argument('--db_inject', action='store_true',
+                        help='mysql database injection')
+
+    parser.add_argument('--evaluation', action='store_true',
+                        help='대상 아파트 정확도 평가')
+
+    parser.add_argument('--evaluation_plot', action='store_true',
+                        help='대상 아파트 정확도 시각화 및 저장 (setting.py에 있는 image_path 값을 참조하여 저장)')
+
+    parser.add_argument('--apt_detail_pk', action='store', type=int,
+                        help='예측 대상 아파트 pk')
+
+    parser.add_argument('--date', action='store', type=str,
+                        default=datetime.now().strftime('%Y-%m-%d'),
+                        help='예측하고 싶은 날짜 ex) 2018-01-01 (default : 현재 날짜)')
 
     # feature information
-    parser.add_argument('--feature_list', type=list, default=settings.features)
-    parser.add_argument('--sale_month_size', type=int, default=settings.sale_month_size)
-    parser.add_argument('--sale_recent_month_size', type=int, default=settings.sale_recent_month_size)
-    parser.add_argument('--trade_month_size', type=int, default=settings.trade_month_size)
-    parser.add_argument('--trade_recent_month_size', type=int, default=settings.trade_recent_month_size)
-    parser.add_argument('--model_info', type=str, default=settings.model_info)
-    parser.add_argument('--previous_month_size', type=int, default=settings.predicate_previous_month_size)
-    parser.add_argument('--feature_engine', type=str, default='optimizer', choices=['default', 'optimizer'])
-    parser.add_argument('--trade_cd', type=str, choices=['t', 'r'], default=settings.trade_cd)
+    parser.add_argument('--feature_list',
+                        type=list,
+                        default=settings.features,
+                        help='예측에 필요한 feature (default: setting.py에 있는 features 참조)')
+
+    parser.add_argument('--sale_month_size',
+                        type=int,
+                        default=settings.sale_month_size,
+                        help='예측시 사용될 매물 데이터 크기 (default: setting.py에 있는 sale_month_size 참조)')
+
+    parser.add_argument('--sale_recent_month_size',
+                        type=int,
+                        default=settings.sale_recent_month_size,
+                        help='예측시 사용될 최근 매물 데이터 크기 (default: setting.py에 있는 sale_recent_month_size 참조')
+
+    parser.add_argument('--trade_month_size',
+                        type=int,
+                        default=settings.trade_month_size,
+                        help='예측시 사용될 매매 데이터 크기 (default: setting.py에 있는 trade_month_size 참조)')
+
+    parser.add_argument('--trade_recent_month_size',
+                        type=int,
+                        default=settings.trade_recent_month_size,
+                        help='예측시 사용될 최근 매매 데이터 크기 (default: setting.py에 있는 trade_recent_month_size 참조)')
+
+    parser.add_argument('--model_info',
+                        type=str,
+                        default=settings.model_info,
+                        help='모델 위치 정보 (default: setting.py에 있는 model_info)')
+
+    parser.add_argument('--previous_month_size', type=int, default=settings.predicate_previous_month_size,
+                        help='예측시 사용하는 과거 매물&매매 사이즈 '
+                             '(default: setting.py에 있는 predicate_previous_month_size')
+
+    parser.add_argument('--feature_engine',
+                        type=str,
+                        default='optimizer',
+                        choices=['default', 'optimizer'],
+                        help='feature engineering 을 하는 방법')
+
+    parser.add_argument('--trade_cd',
+                        type=str,
+                        choices=['t', 'r'],
+                        default=settings.trade_cd,
+                        help='t : 아파트 매매가격 추정 / r: 아파트 전월세가격 추정')
+
     return parser.parse_args()
 
 
