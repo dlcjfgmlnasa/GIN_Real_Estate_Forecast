@@ -12,23 +12,71 @@ from feature import make_feature, optimized_make_feature, FeatureExistsError
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--calc_similarity_apt', action='store_true')
-    parser.add_argument('--make_dataset', action='store_true')
-    parser.add_argument('--correlation', action='store_true')
+    parser.add_argument('--calc_similarity_apt',
+                        action='store_true',
+                        help='APT similarity 계산')
 
-    parser.add_argument('--features', type=list, default=settings.features)
-    parser.add_argument('--sale_month_size', type=int, default=settings.sale_month_size)
-    parser.add_argument('--sale_recent_month_size', type=int, default=settings.sale_recent_month_size)
-    parser.add_argument('--trade_month_size', type=int, default=settings.trade_month_size)
-    parser.add_argument('--trade_recent_month_size', type=int, default=settings.trade_recent_month_size)
+    parser.add_argument('--make_dataset',
+                        action='store_true',
+                        help='데이터셋 생성')
 
-    parser.add_argument('--similarity_size', type=int, default=settings.similarity_size)
+    parser.add_argument('--correlation',
+                        action='store_true',
+                        help='correlation analysis')
 
-    parser.add_argument('--save_path', type=str, default=settings.save_path)
-    parser.add_argument('--correlation_path', type=str, default=settings.correlation_path)
-    parser.add_argument('--trade_cd', type=str, choices=['t', 'c'], default=settings.trade_cd)
-    parser.add_argument('--label_name', type=str, default=settings.label_name)
-    parser.add_argument('--dataset_pk_size', type=int, default=settings.dataset_pk_size)
+    # feature information
+    parser.add_argument('--features',
+                        type=list,
+                        default=settings.features,
+                        help='예측에 필요한 feature (default: setting.py에 있는 features 참조)')
+
+    parser.add_argument('--sale_month_size',
+                        type=int,
+                        default=settings.sale_month_size,
+                        help='예측시 사용될 매물 데이터 크기 (default: setting.py에 있는 sale_month_size 참조)')
+
+    parser.add_argument('--sale_recent_month_size',
+                        type=int,
+                        default=settings.sale_recent_month_size,
+                        help='예측시 사용될 매물 데이터 크기 (default: setting.py에 있는 sale_month_size 참조)')
+
+    parser.add_argument('--trade_month_size',
+                        type=int,
+                        default=settings.trade_month_size,
+                        help='예측시 사용될 매매 데이터 크기 (default: setting.py에 있는 trade_month_size 참조)')
+
+    parser.add_argument('--trade_recent_month_size',
+                        type=int,
+                        default=settings.trade_recent_month_size,
+                        help='예측시 사용될 최근 매매 데이터 크기 (default: setting.py에 있는 trade_recent_month_size 참조)')
+
+    parser.add_argument('--trade_cd',
+                        type=str,
+                        choices=['t', 'c'],
+                        default=settings.trade_cd,
+                        help='t : 아파트 매매가격 추정 / r: 아파트 전월세가격 추정')
+
+    # data path information
+    parser.add_argument('--similarity_size',
+                        type=int,
+                        default=settings.similarity_size,
+                        help='비슷한 아파트 리스트 출력 갯수 (default: setting.py에 있는 similarity_size 참조')
+
+    parser.add_argument('--save_path',
+                        type=str,
+                        default=settings.save_path,
+                        help='DATASET PATH (default: setting.py에 있는 save_path 참조)')
+
+    parser.add_argument('--correlation_path',
+                        type=str,
+                        default=settings.correlation_path,
+                        help='correlation analysis result DATA PATH (default: setting.py에 있는 correlation_path 참조)')
+
+    parser.add_argument('--label_name',
+                        type=str,
+                        default=settings.label_name,
+                        help='DATASET label name (default: setting.py에 있는 label_name 참조)')
+
     return parser.parse_args()
 
 
