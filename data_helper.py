@@ -138,9 +138,9 @@ def make_dataset(argument):
                 except FeatureExistsError:
                     # 매매 혹은 매물 데이터를 바탕으로한 feature 하나도 존재하지 않을때...
                     continue
-                # except Exception as e:
-                #     print(e)
-                #     continue
+                except Exception as e:
+                    print(e)
+                    continue
 
                 feature_df = feature['data']
                 feature_df['apt_detail_pk'] = apt_detail_pk

@@ -310,6 +310,7 @@ class GinAptQuery(object):
                 SELECT distinct lawd_cd
                 FROM apt_rtms_cnt
                 WHERE pk_apt_detail=%s
+                LIMIT 1
               )
         """)
         cursor.execute(query, params=(trg_date, apt_detail_pk))
@@ -330,6 +331,7 @@ class GinAptQuery(object):
                 SELECT distinct lawd_cd
                 FROM apt_rtms_cnt
                 WHERE pk_apt_detail=%s
+                LIMIT 1
               )
         """)
         cursor.execute(query, params=(trg_date, apt_detail_pk))
