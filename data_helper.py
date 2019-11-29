@@ -153,15 +153,17 @@ def make_dataset(argument):
             break
 
     # file save...
+    print('file saving...')
     for status, feature_df in total_data.items():
         if len(feature_df) == 0:
             continue
-
         filename = 'apt_dataset_{}.csv'.format(status)
         filepath = os.path.join(argument.save_path, filename)
+        print('{} saving start'.format(filepath))
         total_df = pd.concat(feature_df)
         total_df = total_df.reset_index(drop=True)
         total_df.to_csv(filepath, index=False)
+        print('{} saving complete'.format(filepath))
 
 
 def correlation_analysis(argument):
