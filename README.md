@@ -1,8 +1,8 @@
 # GIN Real Estate Forecast
 
-지인 부동산 아파트 실거래가 시세 예측
+작성중...
 
-작성중 ...
+지인 부동산 아파트 실거래가 시세 예측
 
 <br>
 
@@ -10,7 +10,7 @@
 - **language** : Python 3.6 (may work with other versions, but I used 3.6) 
 - **Database** : Mysql 5.7
 - **python library**
-- scikit-learn 0.21.3
+  - scikit-learn 0.21.3
   - pandas 0.25.0
   - numpy 1.17.0
   - ...
@@ -88,7 +88,7 @@
 |   **10**    |   4.004123346   |     79.8738901      |    20.1261099     |
 | **average** | **3.928836023** |   **80.32605455**   |  **19.67394545**  |
 
-
+<br>
 
 #### - (매물정보 + 거래량 정보 feature) 를 활용한 모델 - sale.model
 
@@ -106,7 +106,7 @@
 |   **10**    |   4.483332198   |     79.64721845     |    20.35278155    |
 | **average** | **4.472175266** |   **78.48429692**   |  **21.51570308**  |
 
-
+<br>
 
 #### - (매매정보 + 거래량 정보 feature) 를 활용한 모델 - trade.model
 
@@ -124,7 +124,7 @@
 |   **10**    | 5.058044208 |     71.37663945     |    28.62336055    |
 | **average** | 5.068027163 |      71.36739       |     28.63261      |
 
-
+<br>
 
 
 
@@ -162,7 +162,7 @@
 
 ---
 
-
+<br>
 
 ### test.py
 
@@ -176,19 +176,86 @@
 
 ---
 
-
+<br>
 
 ### data_helper.py
 
 ```cmd
-python data_helper.py --help
+usage: data_helper.py [-h] [--calc_similarity_apt] [--make_dataset]
+                      [--correlation] [--features FEATURES]
+                      [--sale_month_size SALE_MONTH_SIZE]
+                      [--sale_recent_month_size SALE_RECENT_MONTH_SIZE]
+                      [--trade_month_size TRADE_MONTH_SIZE]
+                      [--trade_recent_month_size TRADE_RECENT_MONTH_SIZE]
+                      [--trade_cd {t,c}] [--similarity_size SIMILARITY_SIZE]
+                      [--save_path SAVE_PATH]
+                      [--correlation_path CORRELATION_PATH]
+                      [--label_name LABEL_NAME]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --calc_similarity_apt
+                        APT similarity 계산
+  --make_dataset        데이터셋 생성
+  --correlation         correlation analysis
+  --features FEATURES   예측에 필요한 feature (default: setting.py에 있는 features 참조)
+  --sale_month_size SALE_MONTH_SIZE
+                        예측시 사용될 매물 데이터 크기 (default: setting.py에 있는
+                        sale_month_size 참조)
+  --sale_recent_month_size SALE_RECENT_MONTH_SIZE
+                        예측시 사용될 매물 데이터 크기 (default: setting.py에 있는
+                        sale_month_size 참조)
+  --trade_month_size TRADE_MONTH_SIZE
+                        예측시 사용될 매매 데이터 크기 (default: setting.py에 있는
+                        trade_month_size 참조)
+  --trade_recent_month_size TRADE_RECENT_MONTH_SIZE
+                        예측시 사용될 최근 매매 데이터 크기 (default: setting.py에 있는
+                        trade_recent_month_size 참조)
+  --trade_cd {t,c}      t : 아파트 매매가격 추정 / r: 아파트 전월세가격 추정
+  --similarity_size SIMILARITY_SIZE
+                        비슷한 아파트 리스트 출력 갯수 (default: setting.py에 있는
+                        similarity_size 참조
+  --save_path SAVE_PATH
+                        DATASET PATH (default: setting.py에 있는 save_path 참조)
+  --correlation_path CORRELATION_PATH
+                        correlation analysis result DATA PATH (default:
+                        setting.py에 있는 correlation_path 참조)
+  --label_name LABEL_NAME
+                        DATASET label name (default: setting.py에 있는 label_name
+                        참조)
 ```
+
+
+
+#### 1. Train dataset 생성
+
+```cmd
+=> python data_helper.py --make_dataset
+```
+
+
+
+#### 2. Correlation
+
+```cmd
+=> python data_helper.py --make_dataset
+```
+
+
+
+#### 3. Calculation Similarity APT
+
+```cmd
+=> python data_helper.py --calc_similarity_apt
+```
+
+
 
 
 
 ---
 
-
+<br>
 
 ### predicate.py
 
@@ -252,7 +319,7 @@ optional arguments:
 => python predicate.py --full_pk --full_date
 ```
 
-- option : --db_inject 를 추가하면 mysql에 예측된 결과 저장
+- **option** : *--db_inject* 를 추가하면 mysql에 예측된 결과 저장
 
   
 
@@ -263,11 +330,14 @@ optional arguments:
 => python predicate.py --full_pk --date={날짜}
 ```
 
-- example
-  1. `python predicate.py --full_pk` : 현재 날짜에 예측 대상 아파트 시세 예측
-  2. `python predicate.py --full_pk --date=2018-01-01 ` : 2018-01-01 예측 대상 아파트 시세 예측
+- **example**
+  
+  1. `python predicate.py --full_pk`  : 현재 날짜에 예측 대상 아파트 시세 예측
+2. `python predicate.py --full_pk --date=2018-01-01 ` : 2018-01-01 예측 대상 아파트 시세 예측
 
-- option : --db_inject 를 추가하면 mysql에 예측된 결과 저장
+  
+
+- **option** : *--db_inject* 를 추가하면 mysql에 예측된 결과 저장
 
 
 
@@ -277,21 +347,37 @@ optional arguments:
 => python predicate.py --full_date --apt_detail_pk={아파트 pk}
 ```
 
+- **example**
+
+  1. `python predicate.py --full_date --apt_detail_pk=1`  : 2006년도 부터 현재까지 [아파트 pk 1] 시세 예측
+
+  
+
+- **option** : *--db_inject* 를 추가하면 mysql에 예측된 결과 저장
 
 
-#### 4. [apt_detail_pk] 정확도 평가
+
+#### 4. 지정된 날짜에 대해서 [apt_detail_pk] 시세 예측
+
+```cmd
+=> python predicate.py --apt_detail_pk={아파트 pk}
+=> python predicate.py --apt_detail_pk={아파트 pk} --date={날짜}
+```
+
+- **example**
+  1. `python predicate.py --apt_detail_pk=1` : [아파트 pk 1]  
+  2. `python predicate.py --apt_detail_pk=1 --date=2018-01-01`: [아파트 pk 1]  예측 정확도 측정 및 그래프 출력
+
+
+
+#### 5. [apt_detail_pk] 정확도 평가
 
 ```cmd
 => python predicate.py --evaluation --apt_detail_pk={아파트 pk}
 => python predicate.py --evaluation --evaluation_plot --apt_detail_pk={아파트 pk}
 ```
 
-
-
-#### 5. 지정된 날짜에 대해서 [apt_detail_pk] 시세 예측
-
-```cmd
-=> python predicate.py --apt_detail_pk={아파트 pk}
-=> python predicate.py --apt_detail_pk={아파트 pk} --date={날짜}
-```
+- **example**
+  1. `python predicate.py --evaluation --apt_detail_pk=1` : [아파트 pk 1]  예측 정확도 측정
+  2. `python predicate.py --evaluation --evaluation_plot --apt_detail_pk=1` : [아파트 pk 1]  예측 정확도 측정 및 그래프 출력
 
