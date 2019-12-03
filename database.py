@@ -16,7 +16,6 @@ class GinAptQuery(object):
                AND a.bldg_cd IN (1, 6)
                AND b.NUM_OF_FAMILY > 29
              ORDER BY a.idx, b.idx
-             LIMIT 0, 10
                ;
         """)
         cursor.execute(query)
@@ -34,7 +33,6 @@ class GinAptQuery(object):
                AND a.bldg_cd IN (1, 6)
                AND b.NUM_OF_FAMILY > 29
              ORDER BY a.idx, b.idx
-             LIMIT 0, 10
                ;
         """)
         cursor.execute(query)
