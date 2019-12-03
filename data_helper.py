@@ -1,13 +1,16 @@
 # -*- coding:utf-8 -*-
+import concurrent.futures
 import os
 import settings
 import argparse
 import numpy as np
 import pandas as pd
-from grouping import AptGroup
+import time
+from grouping import AptGroup, AptComplexGroup, AptFloorGroup
 from datetime import datetime
 from database import GinAptQuery, cursor, cnx
-from feature import make_feature, optimized_make_feature, FeatureExistsError
+from feature import make_feature, optimized_make_feature, optimized_make_feature2, FeatureExistsError, \
+    AptPriceRegressionFeature
 
 
 def get_args():
@@ -97,7 +100,7 @@ def make_apt_similarity_dataset(argument):
         cursor.execute("""
             INSERT INTO apt_similarity (pk_apt_detail, similarity)
             VALUES (%s, %s);
-        """, params=(apt_detail_pk, similarity_str, ))
+        """, params=(apt_detail_pk, similarity_str,))
         cnx.commit()
 
 
@@ -110,9 +113,18 @@ def make_dataset(argument):
         settings.sale_feature_model_name: [],
         settings.trade_feature_model_name: []
     }
+    print('total count : {} '.format(len(pk_list)))
+    start = time.time()
+    start_time = time.time()
+    end_time = time.time()
+
     for i, (apt_master_pk, apt_detail_pk) in enumerate(pk_list):
         try:
-            print('i : {} \t apt detail pk : {}'.format(i, apt_detail_pk))
+            print('i : {} \tapt_master_pk:{} \tapt_detail_pk:{} \tTotalTime:{} \tEachTime:{}'.format(i, apt_master_pk,
+                                                                                                     apt_detail_pk,
+                                                                                                     end_time - start,
+                                                                                                     end_time - start_time))
+            start_time = time.time()
             for trade_pk, _, year, mon, day, floor, extent, price in \
                     query.get_trade_price(apt_detail_pk, argument.trade_cd).fetchall():
                 trg_date = '{0}-{1:02d}-{2:02d}'.format(year, int(mon), int(day))
@@ -148,9 +160,13 @@ def make_dataset(argument):
 
                 status = feature['status']
                 total_data[status].append(feature_df)
+        except Exception as e:
+            print(e)
+            break
         except KeyboardInterrupt:
             # If KeyboardInterrupt file save...
             break
+        end_time = time.time()
 
     # file save...
     print('file saving...')
@@ -199,12 +215,214 @@ def correlation_analysis(argument):
     correlation_df.to_csv(argument.correlation_path, index=False)
 
 
+def make_dataset_optimize(argument):
+    query = GinAptQuery()
+    pk_list = [pk for pk in query.get_predicate_apt_list_with_extent().fetchall()]
+
+    total_data = {
+        settings.full_feature_model_name: [],
+        settings.sale_feature_model_name: [],
+        settings.trade_feature_model_name: []
+    }
+    print('total count : {} '.format(len(pk_list)))
+    start = time.time()
+    start_time = time.time()
+    end_time = time.time()
+
+    for i, (apt_master_pk, apt_detail_pk, apt_detail_extent) in enumerate(pk_list):
+        try:
+            print('i: {} \tapt_master_pk:{} \tapt_detail_pk:{} \tTotalTime:{} \tEachTime:{}'.format(i, apt_master_pk,
+                                                                                                    apt_detail_pk,
+                                                                                                    end_time - start,
+                                                                                                    end_time - start_time))
+            start_time = time.time()
+
+            apt_complex_group_list = AptComplexGroup.get_similarity_apt_list(
+                apt_detail_pk=apt_detail_pk
+            )
+
+            floor_lists = AptFloorGroup.get_similarity_apt_floor_lists(
+                apt_detail_pk=apt_detail_pk
+            )
+
+            total_sale_df = pd.DataFrame(
+                GinAptQuery.get_sale_price(
+                    apt_detail_pk=','.join([str(apt) for apt in apt_complex_group_list]),
+                    trade_cd=argument.trade_cd
+                ),
+                columns=['apt_detail_pk', 'date', 'floor', 'extent', 'price']
+            )
+            total_sale_df.price = total_sale_df.price.astype(np.float)
+            total_sale_df.floor = pd.to_numeric(total_sale_df.floor)
+
+            total_trade_df = pd.DataFrame(
+                GinAptQuery.get_trade_price_optimize(
+                    apt_detail_pk=','.join([str(apt) for apt in apt_complex_group_list]),
+                    trade_cd=argument.trade_cd
+                ),
+                columns=['pk_apt_trade', 'apt_detail_pk', 'date', 'floor', 'extent', 'price']
+            )
+            total_trade_df.price = total_trade_df.price.astype(np.float)
+            total_trade_df.floor = pd.to_numeric(total_trade_df.floor)
+
+            apt_price_regression_feature = AptPriceRegressionFeature(
+                apt_master_pk=apt_master_pk,
+                apt_detail_pk=apt_detail_pk,
+                trade_cd=argument.trade_cd
+            )
+            # 3) 거래량
+            volume_rate_df = apt_price_regression_feature.training_volume_all()
+            search_df = total_trade_df[total_trade_df.apt_detail_pk == apt_detail_pk]
+
+            for pk_apt_trade, _, date, floor, extent, price in \
+                    query.get_trade_price_optimize(apt_detail_pk, argument.trade_cd).fetchall():
+                try:
+                    feature = optimized_make_feature2(feature_name_list=argument.features, apt_master_pk=apt_master_pk,
+                                                      apt_detail_pk=apt_detail_pk, trade_cd=argument.trade_cd,
+                                                      trg_date=date, sale_month_size=argument.sale_month_size,
+                                                      sale_recent_month_size=argument.sale_recent_month_size,
+                                                      trade_month_size=argument.trade_month_size,
+                                                      trade_recent_month_size=argument.trade_recent_month_size,
+                                                      floor=floor, extent=extent,
+                                                      apt_complex_group_list=apt_complex_group_list,
+                                                      floor_lists=floor_lists,
+                                                      total_sale_df=total_sale_df,
+                                                      total_trade_df=total_trade_df,
+                                                      aptPriceRegressionFeature=apt_price_regression_feature,
+                                                      volume_rate_df=volume_rate_df,
+                                                      trade_pk=pk_apt_trade)
+                except FeatureExistsError:
+                    # 매매 혹은 매물 데이터를 바탕으로한 feature 하나도 존재하지 않을때...
+                    continue
+                except Exception as e:
+                    print(e)
+                    continue
+
+                feature_df = feature['data']
+                feature_df['apt_detail_pk'] = apt_detail_pk
+                feature_df[argument.label_name] = price
+
+                status = feature['status']
+                total_data[status].append(feature_df)
+
+        except Exception as e:
+            print(e)
+            break
+        except KeyboardInterrupt:
+            # If KeyboardInterrupt file save...
+            break
+        end_time = time.time()
+
+    # file save...
+    print('file saving...')
+    for status, feature_df in total_data.items():
+        if len(feature_df) == 0:
+            continue
+        filename = 'apt_dataset_{}.csv'.format(status)
+        filepath = os.path.join(argument.save_path, filename)
+        print('{} saving start'.format(filepath))
+        total_df = pd.concat(feature_df)
+        total_df = total_df.reset_index(drop=True)
+        total_df.to_csv(filepath, index=False)
+        print('{} saving complete'.format(filepath))
+
+def make_dataset_concurrent(argument):
+    query = GinAptQuery()
+    pk_list = [pk for pk in query.get_predicate_apt_list().fetchall()]
+
+    total_data = {
+        settings.full_feature_model_name: [],
+        settings.sale_feature_model_name: [],
+        settings.trade_feature_model_name: []
+    }
+
+    process_num = 4
+    print('total count : {} '.format(len(pk_list)))
+    begin_time = time.time()
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=process_num) as executor:
+            data = {
+                executor.submit(make_dataset_sub, query, argument, begin_time, apt_pk): apt_pk for apt_pk in pk_list}
+
+            for index in concurrent.futures.as_completed(data):
+                feature = data[index]
+                # status = feature['status']
+                # total_data[status].append(data['data'])
+
+            # file save...
+            print('file saving...')
+            for status, feature_df in total_data.items():
+                if len(feature_df) == 0:
+                    continue
+                filename = 'apt_dataset_{}.csv'.format(status)
+                filepath = os.path.join(argument.save_path, filename)
+                print('{} saving start'.format(filepath))
+                total_df = pd.concat(feature_df)
+                total_df = total_df.reset_index(drop=True)
+                total_df.to_csv(filepath, index=False)
+                print('{} saving complete'.format(filepath))
+
+    except KeyboardInterrupt as e:
+        # If KeyboardInterrupt file save...
+        print(e)
+
+
+def make_dataset_sub(query, argument, begin_time, apt_pk):
+    start_time = time.time()
+    total_data = {
+        settings.full_feature_model_name: [],
+        settings.sale_feature_model_name: [],
+        settings.trade_feature_model_name: []
+    }
+
+    apt_master_pk = apt_pk[0]
+    apt_detail_pk = apt_pk[1]
+    for trade_pk, _, year, mon, day, floor, extent, price in \
+            query.get_trade_price(apt_detail_pk, argument.trade_cd).fetchall():
+        trg_date = '{0}-{1:02d}-{2:02d}'.format(year, int(mon), int(day))
+        trg_date = datetime.strptime(trg_date, '%Y-%m-%d')
+        price = float(price / extent)
+
+        try:
+            feature = optimized_make_feature(feature_name_list=argument.features, apt_master_pk=apt_master_pk,
+                                             apt_detail_pk=apt_detail_pk, trade_cd=argument.trade_cd,
+                                             trg_date=trg_date, sale_month_size=argument.sale_month_size,
+                                             sale_recent_month_size=argument.sale_recent_month_size,
+                                             trade_month_size=argument.trade_month_size,
+                                             trade_recent_month_size=argument.trade_recent_month_size,
+                                             floor=floor, extent=extent, trade_pk=trade_pk)
+        except FeatureExistsError:
+            # 매매 혹은 매물 데이터를 바탕으로한 feature 하나도 존재하지 않을때...
+            continue
+        except Exception as e:
+            print(e)
+            continue
+
+        feature_df = feature['data']
+        feature_df['apt_detail_pk'] = apt_detail_pk
+        feature_df[argument.label_name] = price
+
+        status = feature['status']
+        total_data[status].append(feature_df)
+
+    end_time = time.time()
+
+    print('apt_master_pk:{} \tapt_detail_pk:{} \tTotalTime:{} \tEachTime:{}'.format(apt_master_pk, apt_detail_pk,
+                                                                                    end_time - begin_time,
+                                                                                    end_time - start_time))
+    return {
+        'status': status,
+        'data': total_data
+    }
+
+
 if __name__ == '__main__':
     args = get_args()
 
     # making dataset
     if args.make_dataset:
-        make_dataset(args)
+        make_dataset_optimize(args)
+        #make_dataset(args)
 
     # calculation correlation
     if args.correlation:

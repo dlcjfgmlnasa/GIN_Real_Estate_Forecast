@@ -15,6 +15,26 @@ class GinAptQuery(object):
              WHERE a.total_num_of_family > 99
                AND a.bldg_cd IN (1, 6)
                AND b.NUM_OF_FAMILY > 29
+             ORDER BY a.idx, b.idx
+             LIMIT 0, 10
+               ;
+        """)
+        cursor.execute(query)
+        return cursor
+
+    @staticmethod
+    def get_predicate_apt_list_with_extent():
+        # 예측할 아파트 단지 리스트 출력
+        query = ("""
+             SELECT a.idx, b.idx, b.extent
+              FROM apt_master a 
+             INNER JOIN apt_detail b 
+                ON a.idx = b.master_idx
+             WHERE a.total_num_of_family > 99
+               AND a.bldg_cd IN (1, 6)
+               AND b.NUM_OF_FAMILY > 29
+             ORDER BY a.idx, b.idx
+             LIMIT 0, 10
                ;
         """)
         cursor.execute(query)
@@ -125,6 +145,36 @@ class GinAptQuery(object):
         return cursor
 
     @staticmethod
+    def get_sale_price(apt_detail_pk, trade_cd):
+        # 해당 아파트 층의 매물가격 리스트 출력
+        query = """                
+                    SELECT c.pk_apt_detail, CAST(d.reg_date AS DATETIME), 
+                           CASE d.floor WHEN '고' THEN CAST(m.max_jisang_floor AS SIGNED)
+                                        WHEN '중' THEN CAST(m.max_jisang_floor/2 AS SIGNED)
+                                        WHEN '저' THEN 1
+                                        WHEN '-' THEN CAST(m.max_jisang_floor/2 AS SIGNED)
+                                        ELSE CAST(d.floor AS SIGNED)
+                           END floor,
+                           a.extent, d.price/a.extent AS price
+                    FROM apt_detail a
+                     INNER JOIN apt_master m
+                      ON m.idx = a.master_idx
+                     INNER JOIN naver_apt_sale_detail_group c
+                      ON a.idx = c.pk_apt_detail
+                     INNER JOIN naver_apt_sale d
+                      ON c.pk_naver_apt_master = d.idx
+                     AND c.supply_extent = d.supply_extent
+                     AND c.private_extent = d.extent
+                    WHERE c.pk_apt_detail IN (%s)
+                     AND d.use_yn = 'y'
+                     AND d.trade_cd IN ("%s")
+                   ORDER BY reg_date;
+                """ % (apt_detail_pk, trade_cd)
+        #print(query)
+        cursor.execute(query)
+        return cursor
+        
+    @staticmethod
     def get_trade_price(apt_detail_pk: int, trade_cd: str):
         # 아파트의 매매, 전세/월세, 가격
         if trade_cd == 't':
@@ -145,6 +195,34 @@ class GinAptQuery(object):
             raise NotImplemented()
         cursor.execute(query, params=(apt_detail_pk, ))
         return cursor
+
+    @staticmethod
+    def get_trade_price_optimize(apt_detail_pk, trade_cd):
+        if trade_cd == 't':
+            query = """
+                SELECT pk_apt_trade, pk_apt_detail, 
+                       CAST(CONCAT(year, '-', LPAD(mon,2,'0'), '-', LPAD(day,2,'0')) AS DATETIME), 
+                       CAST(floor AS SIGNED) AS floor, apt_detail.extent, t_amt / apt_detail.extent AS price  
+                FROM apt_trade
+                INNER JOIN apt_detail
+                      ON apt_detail.idx = apt_trade.pk_apt_detail
+                WHERE pk_apt_detail in (%s)
+                  AND EXCEPT_YN='n'
+                ORDER BY deal_ymd, pk_apt_trade;
+            """ % (apt_detail_pk,)
+        else:
+            # TODO : 코드 변경 필요!!
+            query = """
+                SELECT pk_apt_trade, pk_apt_detail, deal_ymd, floor, apt_detail.extent, t_amt 
+                FROM apt_rent
+                WHERE pk_apt_detail in (%s)
+                  AND EXCEPT_YN='n'
+                ORDER BY deal_ymd;
+            """ % (apt_detail_pk,)
+        #print(query)
+        cursor.execute(query)
+        return cursor
+
 
     @staticmethod
     def get_sale_price_with_floor(apt_detail_pk, date_range, floor, trade_cd):
@@ -171,22 +249,39 @@ class GinAptQuery(object):
     @staticmethod
     def get_sale_price_with_floor_extent(apt_detail_pk, date_range, floor, trade_cd):
         # 해당 아파트 층의 매물가격 리스트 출력
-        query = """                
-            SELECT c.pk_apt_detail, d.reg_date, d.floor, d.extent, d.price
-            FROM apt_detail a
-             INNER JOIN naver_apt_sale_detail_group c
-              ON a.idx = c.pk_apt_detail
-             INNER JOIN naver_apt_sale d
-              ON c.pk_naver_apt_master = d.idx
-             AND c.supply_extent = d.supply_extent
-             AND c.private_extent = d.extent
-            WHERE c.pk_apt_detail IN (%s)
-             AND d.reg_date IN (%s)
-             AND d.floor IN (%s)
-             AND d.use_yn = 'y'
-             AND d.trade_cd IN ("%s")
-           ORDER BY reg_date;
-        """ % (apt_detail_pk, date_range, floor, trade_cd)
+        if date_range is None:
+             query = """                
+                SELECT c.pk_apt_detail, d.reg_date, d.floor, d.extent, d.price
+                FROM apt_detail a
+                 INNER JOIN naver_apt_sale_detail_group c
+                  ON a.idx = c.pk_apt_detail
+                 INNER JOIN naver_apt_sale d
+                  ON c.pk_naver_apt_master = d.idx
+                 AND c.supply_extent = d.supply_extent
+                 AND c.private_extent = d.extent
+                WHERE c.pk_apt_detail IN (%s)
+                 AND d.floor IN (%s)
+                 AND d.use_yn = 'y'
+                 AND d.trade_cd IN ("%s")
+               ORDER BY reg_date;
+             """ % (apt_detail_pk, floor, trade_cd)
+        else:
+            query = """                
+                SELECT c.pk_apt_detail, d.reg_date, d.floor, d.extent, d.price
+                FROM apt_detail a
+                 INNER JOIN naver_apt_sale_detail_group c
+                  ON a.idx = c.pk_apt_detail
+                 INNER JOIN naver_apt_sale d
+                  ON c.pk_naver_apt_master = d.idx
+                 AND c.supply_extent = d.supply_extent
+                 AND c.private_extent = d.extent
+                WHERE c.pk_apt_detail IN (%s)
+                 AND d.reg_date IN (%s)
+                 AND d.floor IN (%s)
+                 AND d.use_yn = 'y'
+                 AND d.trade_cd IN ("%s")
+               ORDER BY reg_date;
+             """ % (apt_detail_pk, date_range, floor, trade_cd)
         cursor.execute(query)
         return cursor
 
@@ -217,31 +312,67 @@ class GinAptQuery(object):
 
     @staticmethod
     def get_trade_price_with_floor_extent(apt_detail_pk, date_range, floor, trade_cd):
-        if trade_cd == 't':
-            query = """
-            SELECT pk_apt_trade, pk_apt_detail, deal_ymd, floor, apt_detail.extent, t_amt
-                FROM apt_trade
-                INNER JOIN apt_detail
-                  ON apt_detail.idx = apt_trade.pk_apt_detail
-                WHERE EXCEPT_YN='n'
-                  AND pk_apt_detail in (%s)
-                  AND floor in (%s)
-                  AND deal_ymd IN (%s)
-                ORDER BY deal_ymd;
-            """ % (apt_detail_pk, floor, date_range)
+        if date_range is None:
+            if trade_cd == 't':
+                query = """
+                SELECT pk_apt_trade, pk_apt_detail, deal_ymd, floor, apt_detail.extent, t_amt
+                    FROM apt_trade
+                   INNER JOIN apt_detail
+                      ON apt_detail.idx = apt_trade.pk_apt_detail
+                   WHERE EXCEPT_YN='n'
+                     AND pk_apt_detail in (%s)
+                     AND floor in (%s)
+                   ORDER BY deal_ymd;
+                """ % (apt_detail_pk, floor)
+            else:
+                # TODO : 코드 변경 필요!!
+                query = """
+                    SELECT pk_apt_rent, pk_apt_detail, deal_ymd, floor, apt_detail.extent, t_amt 
+                     FROM apt_rent
+                    INNER JOIN apt_detail
+                       ON apt_detail.idx = apt_rent.pk_apt_detail
+                    WHERE EXCEPT_YN='n'
+                      AND pk_apt_detail in (%s)
+                      AND floor in (%s)
+                    ORDER BY deal_ymd;
+                """ % (apt_detail_pk, floor)
+            cursor.execute(query)
         else:
-            query = """
-                SELECT pk_apt_rent, pk_apt_detail, deal_ymd, floor, apt_detail.extent, deposit as t_amt
-                FROM apt_rent
-                INNER JOIN apt_detail
-                  ON apt_detail.idx = apt_rent.pk_apt_detail
-                WHERE EXCEPT_YN='n'
-                  AND pk_apt_detail in (%s)
-                  AND floor in (%s)
-                  AND deal_ymd IN (%s)
-                ORDER BY deal_ymd;
-            """ % (apt_detail_pk, floor, date_range)
-        cursor.execute(query)
+	        if trade_cd == 't':
+	            query = """
+	            SELECT pk_apt_trade, pk_apt_detail, deal_ymd, floor, apt_detail.extent, t_amt
+	                FROM apt_trade
+	                INNER JOIN apt_detail
+	                  ON apt_detail.idx = apt_trade.pk_apt_detail
+	                WHERE EXCEPT_YN='n'
+	                  AND pk_apt_detail in (%s)
+	                  AND floor in (%s)
+	                  AND deal_ymd IN (%s)
+	                ORDER BY deal_ymd;
+	            """ % (apt_detail_pk, floor, date_range)
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	        else:
+	            query = """
+	                SELECT pk_apt_rent, pk_apt_detail, deal_ymd, floor, apt_detail.extent, deposit as t_amt
+	                FROM apt_rent
+	                INNER JOIN apt_detail
+	                  ON apt_detail.idx = apt_rent.pk_apt_detail
+	                WHERE EXCEPT_YN='n'
+	                  AND pk_apt_detail in (%s)
+	                  AND floor in (%s)
+	                  AND deal_ymd IN (%s)
+	                ORDER BY deal_ymd;
+	            """ % (apt_detail_pk, floor, date_range)
+	        cursor.execute(query)
         return cursor
 
     @staticmethod
@@ -318,6 +449,33 @@ class GinAptQuery(object):
               )
         """)
         cursor.execute(query, params=(trg_date, apt_detail_pk))
+
+        return cursor
+
+    @staticmethod
+    def get_training_volume_all(apt_detail_pk: int):
+        query = ("""
+            SELECT CAST(yyyymmdd AS DATETIME), 
+                   area_20lt_trade_volume_cnt / standard_area_20lt_trade_volume_cnt AS area_20lt_trade_volume_rate, 
+                   area_20ge_30lt_trade_volume_cnt / standard_area_20ge_30lt_trade_volume_cnt AS area_20ge_30lt_trade_volume_rate,
+                   area_30ge_40lt_trade_volume_cnt / standard_area_30ge_40lt_trade_volume_cnt AS area_30ge_40lt_trade_volume_rate, 
+                   area_40ge_50lt_trade_volume_cnt / standard_area_40ge_50lt_trade_volume_cnt AS area_40ge_50lt_trade_volume_rate, 
+                   area_50ge_trade_volume_cnt / standard_area_50ge_trade_volume_cnt AS area_50ge_trade_volume_rate,
+                   year_05lt_trade_volume_cnt / standard_year_05lt_trade_volume_cnt AS year_05lt_trade_volume_rate, 
+                   year_05ge_10lt_trade_volume_cnt / standard_year_05ge_10lt_trade_volume_cnt AS year_05ge_10lt_trade_volume_rate,
+                   year_10ge_15lt_trade_volume_cnt / standard_year_10ge_15lt_trade_volume_cnt AS year_10ge_15lt_trade_volume_rate, 
+                   year_15ge_25lt_trade_volume_cnt / standard_year_15ge_25lt_trade_volume_cnt AS year_15ge_25lt_trade_volume_rate, 
+                   year_25ge_trade_volume_cnt / standard_year_25ge_trade_volume_cnt AS year_25ge_trade_volume_rate
+            FROM bi_volume
+            WHERE yyyymmdd < NOW()
+              AND lawd_cd = (
+                SELECT distinct lawd_cd
+                FROM apt_rtms_cnt
+                WHERE pk_apt_detail=%s
+                LIMIT 1
+              )
+        """)
+        cursor.execute(query, params=(apt_detail_pk,))
 
         return cursor
 

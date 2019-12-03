@@ -104,6 +104,21 @@ class AptFloorGroup(object):
     low_floor = 3
 
     @staticmethod
+    def get_similarity_apt_floor_lists(apt_detail_pk: int):
+        # 같은 아파트의있는 층과 비슷한 아파트의 층을 Grouping 해주는 함수
+        max_floor = GinAptQuery.get_max_floor(apt_detail_pk).fetchone()[0]
+        low_floor = AptFloorGroup.low_floor
+
+        middle = int((max_floor - low_floor) * 0.8) + low_floor  # 80% 중층 그 이상은 20%
+
+        return {
+            'low': list(range(-10, low_floor + 1)),
+            'medium': list(range(low_floor + 1, middle + 1)),
+            'high': list(range(middle + 1, max_floor + 1)),
+            'max_floor': max_floor
+        }
+
+    @staticmethod
     def get_similarity_apt_floor_list(apt_detail_pk: int, floor: str):
         # 같은 아파트의있는 층과 비슷한 아파트의 층을 Grouping 해주는 함수
         max_floor = GinAptQuery.get_max_floor(apt_detail_pk).fetchone()[0]
@@ -160,6 +175,24 @@ class AptFloorGroup(object):
         elif floor_lvl == 'high':
             return range(middle + 1, max_floor + 1)
 
+    @staticmethod
+    def get_floor_min_max(floor: int, floor_lists):
+        low_floor = AptFloorGroup.low_floor
+        floor = int(floor)
+
+        if floor < low_floor:
+            floor_list = floor_lists['low']
+        else:
+            max_floor = int(floor_lists['max_floor'])
+            middle = int((max_floor - low_floor) * 0.8) + low_floor
+            if floor > middle:
+                floor_list = floor_lists['high']
+            else:
+                floor_list = floor_lists['medium']
+        return {
+            'max': max(floor_list),
+            'min': min(floor_list)
+        }
 
 class AptComplexGroup(object):
     # 같은 단지안에 있는 아파트들을 Grouping 해주는 클래스
@@ -213,7 +246,7 @@ class AptComplexGroup(object):
             SELECT idx, extent, num_of_family
             FROM apt_detail
             WHERE master_idx=%s
-            ORDER BY apt_detail.num_of_family DESC
+            ORDER BY num_of_family DESC
         """, params=(apt_master_pk,))
 
         group1 = []  # 85 미만  (extent < 85)
