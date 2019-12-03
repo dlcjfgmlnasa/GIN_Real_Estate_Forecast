@@ -87,9 +87,15 @@ class GinAptQuery(object):
                 ORDER BY deal_ymd;"""
             query = query % (apt_detail_pk, date_sql)
         elif trade_cd == 'd/r':
-            # TODO : 코드 변경 필요!!
             # 아파트 전월세가격 리스트 출력
-            query = None
+            query = """
+                SELECT apt_detail.master_idx, pk_apt_detail,  year, mon, day, floor, apt_detail.extent, deposit as t_amt
+                FROM apt_rent
+                INNER JOIN apt_detail
+                  ON apt_detail.idx = apt_rent.pk_apt_detail
+                WHERE EXCEPT_YN='n' AND pk_apt_detail=%s
+                AND (%s) 
+                ORDER BY deal_ymd;"""
         else:
             raise NotImplemented()
 
@@ -107,10 +113,9 @@ class GinAptQuery(object):
                 WHERE EXCEPT_YN='n' AND pk_apt_detail=%s
                 ORDER BY deal_ymd;""")
         elif trade_cd == 'd/r':
-            # TODO : 코드 변경 필요!!
             # 아파트 전월세가격 리스트 출력
             query = ("""
-                SELECT pk_apt_trade, pk_apt_detail, year, mon, day, floor, deposit, mrent_amt
+                SELECT year, mon, day, deposit as t_amt
                 FROM apt_rent
                 WHERE EXCEPT_YN='n' AND pk_apt_detail=%s
                 ORDER BY deal_ymd;""")
@@ -130,10 +135,9 @@ class GinAptQuery(object):
                 WHERE EXCEPT_YN='n' AND pk_apt_detail=%s
                 ORDER BY deal_ymd;""")
         elif trade_cd == 'd/r':
-            # TODO : 코드 변경 필요!!
             # 아파트 전월세가격 리스트 출력
             query = ("""
-                SELECT pk_apt_trade, pk_apt_detail, year, mon, day, floor, deposit, mrent_amt
+                SELECT pk_apt_rent, pk_apt_detail, year, mon, day, floor, extent, deposit as t_amt
                 FROM apt_rent
                 WHERE EXCEPT_YN='n' AND pk_apt_detail=%s
                 ORDER BY deal_ymd;""")
@@ -199,14 +203,13 @@ class GinAptQuery(object):
                 ORDER BY deal_ymd;
             """ % (apt_detail_pk, floor, date_range)
         else:
-            # TODO : 코드 변경 필요!!
             query = """
-                SELECT pk_apt_trade, pk_apt_detail, deal_ymd, floor, t_amt 
-                FROM apt_trade
+                SELECT pk_apt_rent, pk_apt_detail, deal_ymd, floor, deposit as t_amt 
+                FROM apt_rent
                 WHERE EXCEPT_YN='n'
-                    AND pk_apt_detail=%s
-                    AND floor = %s
-                    AND deal_ymd IN (%s)
+                  AND pk_apt_detail in (%s)
+                  AND floor in (%s)
+                  AND deal_ymd IN (%s)
                 ORDER BY deal_ymd;
             """ % (apt_detail_pk, floor, date_range)
         cursor.execute(query)
@@ -227,14 +230,15 @@ class GinAptQuery(object):
                 ORDER BY deal_ymd;
             """ % (apt_detail_pk, floor, date_range)
         else:
-            # TODO : 코드 변경 필요!!
             query = """
-                SELECT pk_apt_trade, pk_apt_detail, deal_ymd, floor, t_amt 
-                FROM apt_trade
+                SELECT pk_apt_rent, pk_apt_detail, deal_ymd, floor, apt_detail.extent, deposit as t_amt
+                FROM apt_rent
+                INNER JOIN apt_detail
+                  ON apt_detail.idx = apt_rent.pk_apt_detail
                 WHERE EXCEPT_YN='n'
-                    AND pk_apt_detail=%s
-                    AND floor = %s
-                    AND deal_ymd IN (%s)
+                  AND pk_apt_detail in (%s)
+                  AND floor in (%s)
+                  AND deal_ymd IN (%s)
                 ORDER BY deal_ymd;
             """ % (apt_detail_pk, floor, date_range)
         cursor.execute(query)
