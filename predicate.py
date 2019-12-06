@@ -504,9 +504,9 @@ if __name__ == '__main__':
         _df = _df.dropna(axis=0)
         return _df
 
-    price_predicate_columns = ['reg_date', 'price_min', 'price_max', 'price_avg']
-    price_smoothing_predicate_columns = ['reg_date', 'price_min_smoothing', 'price_max_smoothing',
-                                         'price_avg_smoothing']
+    price_predicate_columns = ['reg_date', 'price_max', 'price_avg', 'price_min']
+    price_smoothing_predicate_columns = ['reg_date', 'price_max_smoothing', 'price_avg_smoothing',
+                                         'price_min_smoothing']
 
     # -------------------------------------------------------------------------------------------------------------- #
     # command :
