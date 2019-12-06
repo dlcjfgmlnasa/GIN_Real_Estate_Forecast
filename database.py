@@ -295,7 +295,6 @@ class GinAptQuery(object):
               AND b.total_num_of_family >= 100  
             HAVING distance <= 3000
             ORDER BY distance;
-            ;
         """)
         cursor.execute(query, params=(apt_detail_pk, ))
         return cursor
