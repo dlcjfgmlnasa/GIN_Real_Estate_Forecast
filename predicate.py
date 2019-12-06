@@ -501,6 +501,7 @@ if __name__ == '__main__':
         _df.columns = columns
         _df['apt_detail_pk'] = _apt_detail_pk
         _df['trade_cd'] = argument.trade_cd
+        _df = _df.dropna(axis=0)
         return _df
 
     price_predicate_columns = ['reg_date', 'price_min', 'price_max', 'price_avg']
