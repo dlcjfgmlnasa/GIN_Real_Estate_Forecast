@@ -160,44 +160,59 @@ class AptPredicate(object):
 		self.trade_cd = trade_cd
 
 	def predicate(self, date):
-		# 현재 시장에 나와있는 아직 팔리지 않는 매물들을 바탕으로 예측을 실시
-		month_range = get_month_range(date, self.previous_month_size)
-		# 현재 시장에 나와있는 매물데이터 수집
-		new_trade_list = GinAptQuery.get_new_apt_trade_list(
-			apt_detail_pk=self.apt_detail_pk,
-			date_range='","'.join(month_range),
-			trade_cd=self.trade_cd
-		).fetchall()
-	#### put combination looping here
-		if len(new_trade_list) == 0:
-			# 만약 매물 데이터가 존재하지 않을시 매매 데이터를 활용
-			month_df = pd.DataFrame([month.split('-') for month in month_range],
-									columns=['year', 'month', 'day'])
-			date_sql_df = month_df.T.apply(lambda x: '(year = {0} AND mon = {1} AND real_day = {2})'.format(
-				x.year, x.month, x.day))
-			date_sql = ' OR '.join(date_sql_df.values)
-			new_trade_df = pd.DataFrame(
-				GinAptQuery.get_trade_price_with_sql_date(
-					apt_detail_pk=self.apt_detail_pk,
-					trade_cd=self.trade_cd,
-					date_sql=date_sql).fetchall(),
-				columns=['master_idx', 'pk_apt_detail', 'year', 'month', 'day', 'floor', 'extent', 'price']
-			)
 
-			date_list = [datetime.strptime(f'{year}-{month}-{day}', '%Y-%m-%d') for year, month, day in
-						 zip(new_trade_df.year, new_trade_df.month, new_trade_df.day)]
-			del new_trade_df['year'], new_trade_df['month'], new_trade_df['day']
-			new_trade_df['date'] = date_list
-			new_trade_df = new_trade_df[['master_idx', 'pk_apt_detail', 'date', 'floor', 'extent', 'price']]
-			new_trade_list = new_trade_df.values
+		### create possible combinations of previous_month (maximum 6); sale-trade_month (maximum 5); recent_sale-trade_month (maximum 2)
+		previous_month_range = range(1, self.previous_month_size + 1)
+		sale_month_range = range(1, self.sale_month_size + 1)
+		trade_month_range = range(1, self.trade_month_size + 1)
+		sale_recent_month_range = range(1, self.sale_recent_month_size + 1)
+		trade_recent_month_range = range(1, self.trade_recent_month_size + 1)
+		combine = list(itertools.product(previous_month_range, sale_month_range, trade_month_range, sale_recent_month_range, trade_recent_month_range))
+		### loop over each combination (in ASC order, because smaller is prefer)
+		### if current combination is predictable, break the loop
+		# for (previous_month_size, sale_month_size, trade_month_size, sale_recent_month_size, trade_recent_month_size) in combine:
+		for previous_month_size in previous_month_range:
+			# 현재 시장에 나와있는 아직 팔리지 않는 매물들을 바탕으로 예측을 실시
+			month_range = get_month_range(date, previous_month_size)
+			# 현재 시장에 나와있는 매물데이터 수집
+			new_trade_list = GinAptQuery.get_new_apt_trade_list(
+				apt_detail_pk=self.apt_detail_pk,
+				date_range='","'.join(month_range),
+				trade_cd=self.trade_cd
+			).fetchall()
+			#### put combination looping here
+			if len(new_trade_list) == 0:
+				# 만약 매물 데이터가 존재하지 않을시 매매 데이터를 활용
+				month_df = pd.DataFrame([month.split('-') for month in month_range],
+										columns=['year', 'month', 'day'])
+				date_sql_df = month_df.T.apply(lambda x: '(year = {0} AND mon = {1} AND real_day = {2})'.format(
+					x.year, x.month, x.day))
+				date_sql = ' OR '.join(date_sql_df.values)
+				new_trade_df = pd.DataFrame(
+					GinAptQuery.get_trade_price_with_sql_date(
+						apt_detail_pk=self.apt_detail_pk,
+						trade_cd=self.trade_cd,
+						date_sql=date_sql).fetchall(),
+					columns=['master_idx', 'pk_apt_detail', 'year', 'month', 'day', 'floor', 'extent', 'price']
+				)
 
-		# 예측에 필요한 매매, 매물 데이터가 전혀 존재하지 않을떄...
-		if len(new_trade_list) == 0:
-			raise FeatureExistsError()
+				date_list = [datetime.strptime(f'{year}-{month}-{day}', '%Y-%m-%d') for year, month, day in
+							 zip(new_trade_df.year, new_trade_df.month, new_trade_df.day)]
+				del new_trade_df['year'], new_trade_df['month'], new_trade_df['day']
+				new_trade_df['date'] = date_list
+				new_trade_df = new_trade_df[['master_idx', 'pk_apt_detail', 'date', 'floor', 'extent', 'price']]
+				new_trade_list = new_trade_df.values
 
+			# 예측에 필요한 매매, 매물 데이터가 전혀 존재하지 않을떄...
+			if len(new_trade_list) == 0:
+				if previous_month_size < 6:
+					continue
+				else:
+					raise FeatureExistsError()
+			else:
+				break
 		# 매매, 매물 데이터 리스트 중 일부 select
 		new_trade_list = self.__select_trade_list(new_trade_list)
-
 		# making feature...
 		total_feature = {
 			settings.full_feature_model_name: [],
@@ -205,43 +220,46 @@ class AptPredicate(object):
 			settings.trade_feature_model_name: []
 		}
 		apt_extent = None
+		for (_, sale_month_size, trade_month_size, sale_recent_month_size, trade_recent_month_size) in combine:
+			for apt_master_pk, apt_detail_pk, date, floor, extent, price in new_trade_list:
+				apt_extent = float(extent)
+				floor = transformer_floor(apt_detail_pk, floor)
+				try:
+					features = self.feature_engine(feature_name_list=self.feature_list, apt_master_pk=apt_master_pk,
+												   apt_detail_pk=apt_detail_pk, trade_cd=self.trade_cd, trg_date=date,
+												   sale_month_size=self.sale_month_size,
+												   sale_recent_month_size=self.sale_recent_month_size,
+												   trade_month_size=self.trade_month_size,
+												   trade_recent_month_size=self.trade_recent_month_size,
+												   floor=floor, extent=extent)
+				except FeatureExistsError:
+					# 매매 혹은 매물 데이터를 바탕으로한 feature 하나도 존재하지 않을때...
+					continue
 
-		for apt_master_pk, apt_detail_pk, date, floor, extent, price in new_trade_list:
-			apt_extent = float(extent)
-			floor = transformer_floor(apt_detail_pk, floor)
-
-			try:
-				features = self.feature_engine(feature_name_list=self.feature_list, apt_master_pk=apt_master_pk,
-											   apt_detail_pk=apt_detail_pk, trade_cd=self.trade_cd, trg_date=date,
-											   sale_month_size=self.sale_month_size,
-											   sale_recent_month_size=self.sale_recent_month_size,
-											   trade_month_size=self.trade_month_size,
-											   trade_recent_month_size=self.trade_recent_month_size,
-											   floor=floor, extent=extent)
-			except FeatureExistsError:
-				# 매매 혹은 매물 데이터를 바탕으로한 feature 하나도 존재하지 않을때...
-				continue
-
-			status = features['status']
-			data = features['data']
-			total_feature[status].append(data)
-		predication_list = []
-		feature_name = None
-		for feature_name, data in total_feature.items():
-			if len(data) == 0:
-				continue
+				status = features['status']
+				data = features['data']
+				total_feature[status].append(data)
+			predication_list = []
+			feature_name = None
+			for feature_name, data in total_feature.items():
+				if len(data) == 0:
+					continue
+				else:
+					df = pd.concat(data)
+					feature_df = df.reset_index(drop=True).astype(np.float)
+					# Get model...
+					model = self.models[feature_name]
+					predication = model.predict(feature_df) * apt_extent
+					predication_list.append(predication)
+					break
+			# 예측에 필요한 매매, 매물 데이터가 전혀 존재하지 않을떄...
+			if len(predication_list) == 0:
+				if sale_month_size == self.sale_month_size and trade_recent_month_size == self.trade_recent_month_size:
+					raise FeatureExistsError()
+				else:
+					continue
 			else:
-				df = pd.concat(data)
-				feature_df = df.reset_index(drop=True).astype(np.float)
-				# Get model...
-				model = self.models[feature_name]
-				predication = model.predict(feature_df) * apt_extent
-				predication_list.append(predication)
 				break
-		# 예측에 필요한 매매, 매물 데이터가 전혀 존재하지 않을떄...
-		if len(predication_list) == 0:
-			raise FeatureExistsError()
-
 		# Predication max, Predicate min, Predicate avg
 		result = {
 			'predicate_price_max': np.max(predication_list),
@@ -357,13 +375,9 @@ class AptPredicate(object):
 
 			df = pd.DataFrame()
 			df['date'] = date_temp
-
-			print(date_temp)
 		df['predicate_price_max'] = predicate_price_max
 		df['predicate_price_avg'] = predicate_price_avg
 		df['predicate_price_min'] = predicate_price_min
-		print(df)
-		exit()
 		# interpolate
 		df['predicate_price_max'] = df['predicate_price_max'].interpolate()
 		df['predicate_price_avg'] = df['predicate_price_avg'].interpolate()
@@ -544,13 +558,6 @@ if __name__ == '__main__':
 	price_smoothing_predicate_columns = ['reg_date', 'price_max_smoothing', 'price_avg_smoothing',
 										 'price_min_smoothing']
 
-	### create possible combinations of previous_month (maximum 6); sale-trade_month (maximum 5); recent_sale-trade_month (maximum 2)
-	previous_month_range = range(1, argument.previous_month_size + 1)
-	sale_month_range = range(1, argument.sale_month_size + 1)
-	trade_month_range = range(1, argument.trade_month_size + 1)
-	sale_recent_month_range = range(1, argument.sale_recent_month_size + 1)
-	trade_recent_month_range = range(1, argument.trade_recent_month_size + 1)
-	combine = list(itertools.product(previous_month_range, sale_month_range, trade_month_range, sale_recent_month_range, trade_recent_month_range))
 	# -------------------------------------------------------------------------------------------------------------- #
 	# command :
 	#       - python predicate.py --full_pk --full_date
@@ -564,37 +571,30 @@ if __name__ == '__main__':
 		# 	for line in ff:
 		# 		pk_list.append(int(line.strip()))
 		# pk_list = pk_list[0:1]
-		for detail_pk in pk_list:
-			if detail_pk != 73573:
-				continue
-			### loop over each combination (in ASC order, because smaller is prefer)
-			### if current combination is predictable, break the loop
-			for (previous_month_size,sale_month_size,trade_month_size,sale_recent_month_size,trade_recent_month_size) in combine:
-				try:
-					regression = AptPredicate(apt_detail_pk=detail_pk, models=m,
-											  feature_engine=f_e, feature_list=argument.feature_list,
-											  previous_month_size=previous_month_size,
-											  sale_month_size=sale_month_size,
-											  sale_recent_month_size=sale_recent_month_size,
-											  trade_month_size=trade_month_size,
-											  trade_recent_month_size=trade_recent_month_size,
-											  trade_cd=argument.trade_cd)
 
-					_result_df = regression.predicate_full()
-					_result_df_smooth = regression.predicate_transform_range(_result_df)
-					#Database injection
-					if argument.db_inject:
-						_result_df = formatting_df(_result_df, price_predicate_columns, detail_pk)
-						_result_df_smooth = formatting_df(_result_df_smooth, price_smoothing_predicate_columns, detail_pk)
-						# database injection
-						GinAptQuery.insert_or_update_predicate_value(list(_result_df.values))
-						GinAptQuery.insert_or_update_predicate_smoothing_value(list(_result_df_smooth.values))
-						print(f'{detail_pk} pk data - Database Injection')
-					print('successful combination: \n\tprevious_month_size:{}\n\tsale_month_size: {}\n\ttrade_month_size: {}\n\tsale_recent_month_size: {}\n\ttrade_recent_month_size: {}\n\t'.format(previous_month_size,sale_month_size,trade_month_size,sale_recent_month_size,trade_recent_month_size))
-					break
-				except Exception as e:
-					print(e)
-					pass
+		for detail_pk in pk_list:
+			try:
+				regression = AptPredicate(apt_detail_pk=detail_pk, models=m,
+										  feature_engine=f_e, feature_list=argument.feature_list,
+										  previous_month_size=argument.previous_month_size,
+										  sale_month_size=argument.sale_month_size,
+										  sale_recent_month_size=argument.sale_recent_month_size,
+										  trade_month_size=argument.trade_month_size,
+										  trade_recent_month_size=argument.trade_recent_month_size,
+										  trade_cd=argument.trade_cd)
+				_result_df = regression.predicate_full()
+				_result_df_smooth = regression.predicate_transform_range(_result_df)
+				#Database injection
+				if argument.db_inject:
+					_result_df = formatting_df(_result_df, price_predicate_columns, detail_pk)
+					_result_df_smooth = formatting_df(_result_df_smooth, price_smoothing_predicate_columns, detail_pk)
+					# database injection
+					GinAptQuery.insert_or_update_predicate_value(list(_result_df.values))
+					GinAptQuery.insert_or_update_predicate_smoothing_value(list(_result_df_smooth.values))
+					print(f'{detail_pk} pk data - Database Injection')
+			except Exception as e:
+				print(e)
+				pass
 		print('Complete Database Injection')
 
 	# -------------------------------------------------------------------------------------------------------------- #
@@ -609,35 +609,31 @@ if __name__ == '__main__':
 	elif argument.full_pk:
 		temp = []
 		for detail_pk in pk_list:
-			for (previous_month_size, sale_month_size, trade_month_size, sale_recent_month_size, trade_recent_month_size) in combine:
-				try:
-					regression = AptPredicate(apt_detail_pk=detail_pk, models=m,
-											  feature_engine=f_e, feature_list=argument.feature_list,
-											  previous_month_size=argument.previous_month_size,
-											  sale_month_size=argument.sale_month_size,
-											  sale_recent_month_size=argument.sale_recent_month_size,
-											  trade_month_size=argument.trade_month_size,
-											  trade_recent_month_size=argument.trade_recent_month_size,
-											  trade_cd=argument.trade_cd)
-					_result = regression.predicate(date=argument.date)
-					print('price_min : {0:.4f}   price_avg : {1:.4f}   price_max : {2:.4f}'.format(
-						_result['predicate_price_min'], _result['predicate_price_avg'], _result['predicate_price_max']
-					))
+			try:
+				regression = AptPredicate(apt_detail_pk=detail_pk, models=m,
+										  feature_engine=f_e, feature_list=argument.feature_list,
+										  previous_month_size=argument.previous_month_size,
+										  sale_month_size=argument.sale_month_size,
+										  sale_recent_month_size=argument.sale_recent_month_size,
+										  trade_month_size=argument.trade_month_size,
+										  trade_recent_month_size=argument.trade_recent_month_size,
+										  trade_cd=argument.trade_cd)
+				_result = regression.predicate(date=argument.date)
+				print('price_min : {0:.4f}   price_avg : {1:.4f}   price_max : {2:.4f}'.format(
+					_result['predicate_price_min'], _result['predicate_price_avg'], _result['predicate_price_max']
+				))
 
-					if argument.db_inject:
-						# Store data for Database injection
-						temp.append([argument.date,
-									 _result['predicate_price_min'],
-									 _result['predicate_price_avg'],
-									 _result['predicate_price_max'],
-									 detail_pk,
-									 argument.trade_cd])
-					print('successful combination: \n\tprevious_month_size:{}\n\tsale_month_size: {}\n\ttrade_month_size: {}\n\tsale_recent_month_size: {}\n\ttrade_recent_month_size: {}\n\t'.format(
-						previous_month_size, sale_month_size, trade_month_size, sale_recent_month_size, trade_recent_month_size))
-					break
-				except Exception as e:
-					print(e)
-					pass
+				if argument.db_inject:
+					# Store data for Database injection
+					temp.append([argument.date,
+								 _result['predicate_price_min'],
+								 _result['predicate_price_avg'],
+								 _result['predicate_price_max'],
+								 detail_pk,
+								 argument.trade_cd])
+			except Exception as e:
+				print(e)
+				pass
 
 		# Database injection
 		if argument.db_inject:
@@ -665,36 +661,32 @@ if __name__ == '__main__':
 	# Reference: --db_inject 을 추가하면 mysql 에 예측된 결과 저장
 	# -------------------------------------------------------------------------------------------------------------- #
 	elif argument.full_date and argument.apt_detail_pk:
-		for (previous_month_size, sale_month_size, trade_month_size, sale_recent_month_size, trade_recent_month_size) in combine:
-			try:
-				regression = AptPredicate(apt_detail_pk=argument.apt_detail_pk, models=m,
-										  feature_engine=f_e, feature_list=argument.feature_list,
-										  previous_month_size=argument.previous_month_size,
-										  sale_month_size=argument.sale_month_size,
-										  sale_recent_month_size=argument.sale_recent_month_size,
-										  trade_month_size=argument.trade_month_size,
-										  trade_recent_month_size=argument.trade_recent_month_size,
-										  trade_cd=argument.trade_cd)
-				_result_df = regression.predicate_full()
-				_result_df_smooth = regression.predicate_transform_range(_result_df)
-				print(_result_df_smooth)
+		try:
+			regression = AptPredicate(apt_detail_pk=argument.apt_detail_pk, models=m,
+									  feature_engine=f_e, feature_list=argument.feature_list,
+									  previous_month_size=argument.previous_month_size,
+									  sale_month_size=argument.sale_month_size,
+									  sale_recent_month_size=argument.sale_recent_month_size,
+									  trade_month_size=argument.trade_month_size,
+									  trade_recent_month_size=argument.trade_recent_month_size,
+									  trade_cd=argument.trade_cd)
+			_result_df = regression.predicate_full()
+			_result_df_smooth = regression.predicate_transform_range(_result_df)
+			print(_result_df_smooth)
 
-				if argument.db_inject:
-					# formatting for database injection
-					_result_df = formatting_df(_result_df, price_predicate_columns, argument.apt_detail_pk)
-					_result_df_smooth = formatting_df(_result_df_smooth, price_smoothing_predicate_columns,
-													  argument.apt_detail_pk)
-					# database injection
-					GinAptQuery.insert_or_update_predicate_value(list(_result_df.values))
-					GinAptQuery.insert_or_update_predicate_smoothing_value(list(_result_df_smooth.values))
+			if argument.db_inject:
+				# formatting for database injection
+				_result_df = formatting_df(_result_df, price_predicate_columns, argument.apt_detail_pk)
+				_result_df_smooth = formatting_df(_result_df_smooth, price_smoothing_predicate_columns,
+												  argument.apt_detail_pk)
+				# database injection
+				GinAptQuery.insert_or_update_predicate_value(list(_result_df.values))
+				GinAptQuery.insert_or_update_predicate_smoothing_value(list(_result_df_smooth.values))
 
-					print('Complete Database Injection')
-				print('successful combination: \n\tprevious_month_size:{}\n\tsale_month_size: {}\n\ttrade_month_size: {}\n\tsale_recent_month_size: {}\n\ttrade_recent_month_size: {}\n\t'.format(
-					previous_month_size, sale_month_size, trade_month_size, sale_recent_month_size, trade_recent_month_size))
-				break
-			except Exception as e:
-				print(e)
-				pass
+				print('Complete Database Injection')
+		except Exception as e:
+			print(e)
+			pass
 	# -------------------------------------------------------------------------------------------------------------- #
 	# Command :
 	#       - python predicate.py --evaluation --apt_detail_pk={아파트 pk}
@@ -706,32 +698,30 @@ if __name__ == '__main__':
 	# Explanation : [apt_detail_pk] 정확도 평가
 	# -------------------------------------------------------------------------------------------------------------- #
 	elif argument.evaluation and argument.apt_detail_pk:
-		for (previous_month_size, sale_month_size, trade_month_size, sale_recent_month_size, trade_recent_month_size) in combine:
-			try:
-				regression = AptPredicate(apt_detail_pk=argument.apt_detail_pk, models=m,
-										  feature_engine=f_e, feature_list=argument.feature_list,
-										  previous_month_size=argument.previous_month_size,
-										  sale_month_size=argument.sale_month_size,
-										  sale_recent_month_size=argument.sale_recent_month_size,
-										  trade_month_size=argument.trade_month_size,
-										  trade_recent_month_size=argument.trade_recent_month_size,
-										  trade_cd=argument.trade_cd)
-				_result = regression.predicate_full_evaluation(plot=argument.evaluation_plot)
-				print(_result)
 
-				if argument.evaluation_plot:
-					image_name = '{}.png'.format(argument.apt_detail_pk)
-					image_path = os.path.join(settings.image_path, image_name)
-					_result, img = _result
-					print(_result)
-					img.savefig(image_path)     # Saving Image
-					img.show()
-				print('successful combination: \n\tprevious_month_size:{}\n\tsale_month_size: {}\n\ttrade_month_size: {}\n\tsale_recent_month_size: {}\n\ttrade_recent_month_size: {}\n\t'.format(
-					previous_month_size, sale_month_size, trade_month_size, sale_recent_month_size, trade_recent_month_size))
-				break
-			except Exception as e:
-				print(e)
-				pass
+		try:
+			regression = AptPredicate(apt_detail_pk=argument.apt_detail_pk, models=m,
+									  feature_engine=f_e, feature_list=argument.feature_list,
+									  previous_month_size=argument.previous_month_size,
+									  sale_month_size=argument.sale_month_size,
+									  sale_recent_month_size=argument.sale_recent_month_size,
+									  trade_month_size=argument.trade_month_size,
+									  trade_recent_month_size=argument.trade_recent_month_size,
+									  trade_cd=argument.trade_cd)
+			_result = regression.predicate_full_evaluation(plot=argument.evaluation_plot)
+			print(_result)
+
+			if argument.evaluation_plot:
+				image_name = '{}.png'.format(argument.apt_detail_pk)
+				image_path = os.path.join(settings.image_path, image_name)
+				_result, img = _result
+				print(_result)
+				img.savefig(image_path)     # Saving Image
+				img.show()
+
+		except Exception as e:
+			print(e)
+			pass
 	# -------------------------------------------------------------------------------------------------------------- #
 	# Command :
 	#       - python predicate.py --apt_detail_pk={아파트 pk}
@@ -744,49 +734,46 @@ if __name__ == '__main__':
 	# Reference: --db_inject 을 추가하면 mysql 에 예측된 결과 저장
 	# -------------------------------------------------------------------------------------------------------------- #
 	elif argument.apt_detail_pk:
-		for (previous_month_size, sale_month_size, trade_month_size, sale_recent_month_size, trade_recent_month_size) in combine:
-			try:
-				regression = AptPredicate(apt_detail_pk=argument.apt_detail_pk, models=m,
-										  feature_engine=f_e, feature_list=argument.feature_list,
-										  previous_month_size=argument.previous_month_size,
-										  sale_month_size=argument.sale_month_size,
-										  sale_recent_month_size=argument.sale_recent_month_size,
-										  trade_month_size=argument.trade_month_size,
-										  trade_recent_month_size=argument.trade_recent_month_size,
-										  trade_cd=argument.trade_cd)
-				_result = regression.predicate(date=argument.date)
-				print('price_min : {0:.4f}   price_avg : {1:.4f}   price_max : {2:.4f}'.format(
-					_result['predicate_price_min'], _result['predicate_price_avg'], _result['predicate_price_max']
-				))
+		try:
+			regression = AptPredicate(apt_detail_pk=argument.apt_detail_pk, models=m,
+									  feature_engine=f_e, feature_list=argument.feature_list,
+									  previous_month_size=argument.previous_month_size,
+									  sale_month_size=argument.sale_month_size,
+									  sale_recent_month_size=argument.sale_recent_month_size,
+									  trade_month_size=argument.trade_month_size,
+									  trade_recent_month_size=argument.trade_recent_month_size,
+									  trade_cd=argument.trade_cd)
+			_result = regression.predicate(date=argument.date)
+			print('price_min : {0:.4f}   price_avg : {1:.4f}   price_max : {2:.4f}'.format(
+				_result['predicate_price_min'], _result['predicate_price_avg'], _result['predicate_price_max']
+			))
 
-				# Database injection
-				if argument.db_inject:
-					price_predicate_columns.extend(['apt_detail_pk', 'trade_cd'])
-					_result_df = pd.DataFrame([[argument.date, _result['predicate_price_min'], _result['predicate_price_avg'],
-												_result['predicate_price_max'], argument.apt_detail_pk, argument.trade_cd]],
-											  columns=['date', 'price_min', 'price_avg', 'price_max',
-													   'apt_detail_pk', 'trade_cd'])
+			# Database injection
+			if argument.db_inject:
+				price_predicate_columns.extend(['apt_detail_pk', 'trade_cd'])
+				_result_df = pd.DataFrame([[argument.date, _result['predicate_price_min'], _result['predicate_price_avg'],
+											_result['predicate_price_max'], argument.apt_detail_pk, argument.trade_cd]],
+										  columns=['date', 'price_min', 'price_avg', 'price_max',
+												   'apt_detail_pk', 'trade_cd'])
 
-					# Database injection (price_min, price_max, price_avg)
-					GinAptQuery.insert_or_update_predicate_value(list(_result_df.values))
+				# Database injection (price_min, price_max, price_avg)
+				GinAptQuery.insert_or_update_predicate_value(list(_result_df.values))
 
-					# Database injection (price_min_smoothing, price_max_smoothing, price_avg_smoothing)
-					db_to_frame = pd.read_sql_query(
-						f"SELECT * from predicate_price_ WHERE apt_detail_pk={argument.apt_detail_pk};", settings.cnx)
-					db_to_frame = db_to_frame[['reg_date', 'price_min', 'price_avg', 'price_max']]
-					db_to_frame.columns = ['date', 'predicate_price_min', 'predicate_price_avg', 'predicate_price_max']
+				# Database injection (price_min_smoothing, price_max_smoothing, price_avg_smoothing)
+				db_to_frame = pd.read_sql_query(
+					f"SELECT * from predicate_price_ WHERE apt_detail_pk={argument.apt_detail_pk};", settings.cnx)
+				db_to_frame = db_to_frame[['reg_date', 'price_min', 'price_avg', 'price_max']]
+				db_to_frame.columns = ['date', 'predicate_price_min', 'predicate_price_avg', 'predicate_price_max']
 
-					db_frame_smoothing = AptPredicate.predicate_transform_range(db_to_frame)
-					db_frame_smoothing = formatting_df(db_frame_smoothing, price_smoothing_predicate_columns,
-													   argument.apt_detail_pk)
-					GinAptQuery.insert_or_update_predicate_smoothing_value(list(db_frame_smoothing.values))
+				db_frame_smoothing = AptPredicate.predicate_transform_range(db_to_frame)
+				db_frame_smoothing = formatting_df(db_frame_smoothing, price_smoothing_predicate_columns,
+												   argument.apt_detail_pk)
+				GinAptQuery.insert_or_update_predicate_smoothing_value(list(db_frame_smoothing.values))
 
-					print('Complete Database Injection')
-				print('successful combination: \n\tprevious_month_size:{}\n\tsale_month_size: {}\n\ttrade_month_size: {}\n\tsale_recent_month_size: {}\n\ttrade_recent_month_size: {}\n\t'.format(
-					previous_month_size, sale_month_size, trade_month_size, sale_recent_month_size, trade_recent_month_size))
-				break
-			except Exception as e:
-				print(e)
-				pass
+				print('Complete Database Injection')
+
+		except Exception as e:
+			print(e)
+			pass
 	else:
 		raise argparse.ArgumentError()
