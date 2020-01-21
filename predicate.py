@@ -227,10 +227,10 @@ class AptPredicate(object):
 				try:
 					features = self.feature_engine(feature_name_list=self.feature_list, apt_master_pk=apt_master_pk,
 												   apt_detail_pk=apt_detail_pk, trade_cd=self.trade_cd, trg_date=date,
-												   sale_month_size=self.sale_month_size,
-												   sale_recent_month_size=self.sale_recent_month_size,
-												   trade_month_size=self.trade_month_size,
-												   trade_recent_month_size=self.trade_recent_month_size,
+												   sale_month_size=sale_month_size,
+												   sale_recent_month_size=sale_recent_month_size,
+												   trade_month_size=trade_month_size,
+												   trade_recent_month_size=trade_recent_month_size,
 												   floor=floor, extent=extent)
 				except FeatureExistsError:
 					# 매매 혹은 매물 데이터를 바탕으로한 feature 하나도 존재하지 않을때...
