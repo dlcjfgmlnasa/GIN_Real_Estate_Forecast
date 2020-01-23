@@ -49,7 +49,11 @@ trade_features = [
 trade_volume_feature = [
     # 거래량을 사용하는 feature
     'trade_volume_standard_area',
-    'trade_volume_standard_year'
+    'trade_volume_standard_year',
+    'sale_month_size',
+    'sale_recent_month_size',
+    'trade_month_size',
+    'trade_recent_month_size'
 ]
 
 # total_feature
@@ -57,9 +61,9 @@ features = sale_features + trade_features + trade_volume_feature
 
 dataset_pk_size = 10000
 
-sale_month_size = 6
+sale_month_size = 5
 sale_recent_month_size = 2
-trade_month_size = 6
+trade_month_size = 5
 trade_recent_month_size = 2
 
 similarity_size = 10
@@ -72,15 +76,15 @@ trade_feature_model_name = 'trade'
 
 features_info = {
     full_feature_model_name: features,
-    sale_feature_model_name: sale_features + trade_volume_feature,
-    trade_feature_model_name: trade_features + trade_volume_feature
+    sale_feature_model_name: sale_features + trade_volume_feature[:4], ### remove trade_month feature in sale model
+    trade_feature_model_name: trade_features + trade_volume_feature[:2]+ trade_volume_feature[4:] ### remove sale_month feature in trade model
 }
 
 image_path = os.path.join('./result', 'img')
-model_path = os.path.join('./model', 'store')
 model_type = 'linear_regression'
 trade_cd = 't'
 label_name = 'price'
+model_path = os.path.join('./model', 'store')
 
 model_info = {
     full_feature_model_name: os.path.join(model_path, full_feature_model_name+'.model'),
@@ -97,7 +101,7 @@ test_result_path = os.path.join('./result', 'linear_regression')
 
 # 5. Predicate Parameter
 current_date = datetime.datetime.now().strftime('%Y-%m-%d')
-predicate_previous_month_size = 5
+predicate_previous_month_size = 6
 predicate_standard_price_rate = 0.05
 start_date = '2016-01-01'
 last_date = current_date
