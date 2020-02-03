@@ -451,20 +451,22 @@ class AptPredicate(object):
 
 	@staticmethod
 	def __smooth_triangle(data, degree):
-		triangle = np.concatenate((np.arange(degree + 1), np.arange(degree)[::-1]))
-		smoothed = []
-		if len(data) - degree * 2 >10:
-			for i in range(degree, len(data) - degree * 2):
-				point = data[i:i + len(triangle)] * triangle
-				smoothed.append(np.sum(point) / np.sum(triangle))
-			# Handle boundaries
-			smoothed = [smoothed[0]] * int(degree + degree / 2) + smoothed
-			while len(smoothed) < len(data):
-				smoothed.append(smoothed[-1])
-			return smoothed
-		else:
-			smoothed = numpy_ewma(data, degree)
-			return smoothed
+		smoothed = numpy_ewma(data, degree)
+		return smoothed
+		# triangle = np.concatenate((np.arange(degree + 1), np.arange(degree)[::-1]))
+		# smoothed = []
+		# if len(data) - degree * 2 >10:
+		# 	for i in range(degree, len(data) - degree * 2):
+		# 		point = data[i:i + len(triangle)] * triangle
+		# 		smoothed.append(np.sum(point) / np.sum(triangle))
+		# 	# Handle boundaries
+		# 	smoothed = [smoothed[0]] * int(degree + degree / 2) + smoothed
+		# 	while len(smoothed) < len(data):
+		# 		smoothed.append(smoothed[-1])
+		# 	return smoothed
+		# else:
+		# 	smoothed = numpy_ewma(data, degree)
+		# 	return smoothed
 
 
 
