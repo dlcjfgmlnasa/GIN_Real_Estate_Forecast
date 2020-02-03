@@ -564,8 +564,6 @@ if __name__ == '__main__':
 		# pk_list = pk_list[0:1]
 
 		for detail_pk in pk_list:
-			if detail_pk!=1:
-				continue
 			try:
 				regression = AptPredicate(apt_detail_pk=detail_pk, models=m,
 										  feature_engine=f_e, feature_list=argument.feature_list,
