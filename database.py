@@ -143,29 +143,54 @@ class GinAptQuery(object):
 	@staticmethod
 	def get_sale_price(apt_detail_pk, trade_cd):
 		# 해당 아파트 층의 매물가격 리스트 출력
-		query = """                
-                    SELECT c.pk_apt_detail, CAST(d.reg_date AS DATETIME), 
-                           CASE d.floor WHEN '고' THEN CAST(m.max_jisang_floor AS SIGNED)
-                                        WHEN '중' THEN CAST(m.max_jisang_floor/2 AS SIGNED)
-                                        WHEN '저' THEN 1
-                                        WHEN '-' THEN CAST(m.max_jisang_floor/2 AS SIGNED)
-                                        ELSE CAST(d.floor AS SIGNED)
-                           END floor,
-                           a.extent, d.price/a.extent AS price
-                    FROM apt_detail a
-                     INNER JOIN apt_master m
-                      ON m.idx = a.master_idx
-                     INNER JOIN naver_apt_sale_detail_group c
-                      ON a.idx = c.pk_apt_detail
-                     INNER JOIN naver_apt_sale d
-                      ON c.pk_naver_apt_master = d.idx
-                     AND c.supply_extent = d.supply_extent
-                     AND c.private_extent = d.extent
-                    WHERE c.pk_apt_detail IN (%s)
-                     AND d.use_yn = 'y'
-                     AND d.trade_cd IN ("%s")
-                   ORDER BY reg_date;
-                """ % (apt_detail_pk, trade_cd)
+		if trade_cd=='t':
+			query = """                
+						SELECT c.pk_apt_detail, CAST(d.reg_date AS DATETIME), 
+							   CASE d.floor WHEN '고' THEN CAST(m.max_jisang_floor AS SIGNED)
+											WHEN '중' THEN CAST(m.max_jisang_floor/2 AS SIGNED)
+											WHEN '저' THEN 1
+											WHEN '-' THEN CAST(m.max_jisang_floor/2 AS SIGNED)
+											ELSE CAST(d.floor AS SIGNED)
+							   END floor,
+							   a.extent, d.price/a.extent AS price
+						FROM apt_detail a
+						 INNER JOIN apt_master m
+						  ON m.idx = a.master_idx
+						 INNER JOIN naver_apt_sale_detail_group c
+						  ON a.idx = c.pk_apt_detail
+						 INNER JOIN naver_apt_sale d
+						  ON c.pk_naver_apt_master = d.idx
+						 AND c.supply_extent = d.supply_extent
+						 AND c.private_extent = d.extent
+						WHERE c.pk_apt_detail IN (%s)
+						 AND d.use_yn = 'y'
+						 AND d.trade_cd IN ("t")
+					   ORDER BY reg_date;
+					""" % (apt_detail_pk)
+		else:
+			query = """                
+						SELECT c.pk_apt_detail, CAST(d.reg_date AS DATETIME), 
+							   CASE d.floor WHEN '고' THEN CAST(m.max_jisang_floor AS SIGNED)
+											WHEN '중' THEN CAST(m.max_jisang_floor/2 AS SIGNED)
+											WHEN '저' THEN 1
+											WHEN '-' THEN CAST(m.max_jisang_floor/2 AS SIGNED)
+											ELSE CAST(d.floor AS SIGNED)
+							   END floor,
+							   a.extent, d.price/a.extent AS price
+						FROM apt_detail a
+						 INNER JOIN apt_master m
+						  ON m.idx = a.master_idx
+						 INNER JOIN naver_apt_sale_detail_group c
+						  ON a.idx = c.pk_apt_detail
+						 INNER JOIN naver_apt_sale d
+						  ON c.pk_naver_apt_master = d.idx
+						 AND c.supply_extent = d.supply_extent
+						 AND c.private_extent = d.extent
+						WHERE c.pk_apt_detail IN (%s)
+						 AND d.use_yn = 'y'
+						 AND d.trade_cd IN ("d")
+					   ORDER BY reg_date;
+					""" % (apt_detail_pk)
 		cursor.execute(query)
 		return cursor
 

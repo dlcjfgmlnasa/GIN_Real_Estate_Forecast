@@ -122,12 +122,9 @@ class AptFloorGroup(object):
     def get_similarity_apt_floor_list(apt_detail_pk: int, floor: str):
         # 같은 아파트의있는 층과 비슷한 아파트의 층을 Grouping 해주는 함수
         max_floor = GinAptQuery.get_max_floor(apt_detail_pk).fetchone()[0]
-        floor = int(floor)
-
-        if floor > max_floor:
-            max_floor=floor
         low_floor = AptFloorGroup.low_floor
 
+        floor = int(floor)
 
         if floor <= low_floor:
             return list(range(-10, low_floor + 1))

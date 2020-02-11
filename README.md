@@ -333,7 +333,7 @@ optional arguments:
 - **example**
   
   1. `python predicate.py --full_pk`  : 현재 날짜에 예측 대상 아파트 시세 예측
-2. `python predicate.py --full_pk --date=2018-01-01 ` : 2018-01-01 예측 대상 아파트 시세 예측
+  2. `python predicate.py --full_pk --date=2018-01-01 ` : 2018-01-01 예측 대상 아파트 시세 예측
 
   
 
