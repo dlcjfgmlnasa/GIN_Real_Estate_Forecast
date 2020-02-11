@@ -187,7 +187,7 @@ usage: data_helper.py [-h] [--calc_similarity_apt] [--make_dataset]
                       [--sale_recent_month_size SALE_RECENT_MONTH_SIZE]
                       [--trade_month_size TRADE_MONTH_SIZE]
                       [--trade_recent_month_size TRADE_RECENT_MONTH_SIZE]
-                      [--trade_cd {t,c}] [--similarity_size SIMILARITY_SIZE]
+                      [--trade_cd {t,d}] [--similarity_size SIMILARITY_SIZE]
                       [--save_path SAVE_PATH]
                       [--correlation_path CORRELATION_PATH]
                       [--label_name LABEL_NAME]
@@ -211,7 +211,7 @@ optional arguments:
   --trade_recent_month_size TRADE_RECENT_MONTH_SIZE
                         예측시 사용될 최근 매매 데이터 크기 (default: setting.py에 있는
                         trade_recent_month_size 참조)
-  --trade_cd {t,c}      t : 아파트 매매가격 추정 / r: 아파트 전월세가격 추정
+  --trade_cd {t,d}      t : 아파트 매매가격 추정 / r: 아파트 전월세가격 추정
   --similarity_size SIMILARITY_SIZE
                         비슷한 아파트 리스트 출력 갯수 (default: setting.py에 있는
                         similarity_size 참조
