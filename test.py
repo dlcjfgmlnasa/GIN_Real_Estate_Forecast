@@ -153,19 +153,7 @@ if __name__ == '__main__':
     sale_feature_model_name = 'sale'
     trade_feature_model_name = 'trade'
     if args.trade_cd == 't':
-        args.model_path = os.path.join('./model', 'store')
         args.dataset_path = './dataset'
-        args.model_info = {
-            full_feature_model_name: os.path.join(args.model_path, full_feature_model_name + '.model'),
-            sale_feature_model_name: os.path.join(args.model_path, sale_feature_model_name + '.model'),
-            trade_feature_model_name: os.path.join(args.model_path, trade_feature_model_name + '.model')
-        }
     else:
-        args.model_path = os.path.join('./model', 'store_rent')
         args.dataset_path = './dataset_rent'
-        args.model_info = {
-            full_feature_model_name: os.path.join(args.model_path, full_feature_model_name + '.model'),
-            sale_feature_model_name: os.path.join(args.model_path, sale_feature_model_name + '.model'),
-            trade_feature_model_name: os.path.join(args.model_path, trade_feature_model_name + '.model')
-        }
     main(args)
