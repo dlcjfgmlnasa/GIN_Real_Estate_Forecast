@@ -1,5 +1,8 @@
 .env
 .idea/
 venv/
-model/store
+model/store/*
+model/store_rent/*
+/dataset/*
+/dataset_rent/*
 __pycache__/
