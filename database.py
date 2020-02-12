@@ -512,7 +512,7 @@ class GinAptQuery(object):
 	@staticmethod
 	def insert_or_update_predicate_value(values):
 		query = """
-            insert into predicate_price_ (reg_date, price_max, price_avg, price_min, apt_detail_pk, trade_cd) 
+            insert into predicate_price (reg_date, price_max, price_avg, price_min, apt_detail_pk, trade_cd) 
             values (%s, %s, %s, %s, %s, %s)
             ON DUPLICATE KEY UPDATE
             price_min=VALUES(price_min), price_avg=VALUES(price_avg), price_max=VALUES(price_max)
@@ -523,7 +523,7 @@ class GinAptQuery(object):
 	@staticmethod
 	def insert_or_update_predicate_smoothing_value(values):
 		query = """
-            insert into predicate_price_ (reg_date, price_max_smoothing, price_avg_smoothing, price_min_smoothing, 
+            insert into predicate_price (reg_date, price_max_smoothing, price_avg_smoothing, price_min_smoothing, 
             apt_detail_pk, trade_cd)
             values (%s, %s, %s, %s, %s, %s)
             ON DUPLICATE KEY UPDATE
@@ -550,7 +550,7 @@ class GinAptQuery(object):
 
 	@staticmethod
 	def bbb():
-		query = """SELECT distinct(apt_detail_pk) FROM GIN.predicate_price_ where trade_cd='r';"""
+		query = """SELECT distinct(apt_detail_pk) FROM GIN.predicate_price where trade_cd='r';"""
 		cursor.execute(query)
 		return cursor
 
