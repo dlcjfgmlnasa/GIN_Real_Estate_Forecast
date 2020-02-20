@@ -85,7 +85,7 @@ def get_args():
 
     parser.add_argument('--trade_cd',
                         type=str,
-                        choices=['t', 'r'],
+                        choices=['t', 'd'],
                         default=settings.trade_cd,
                         help='t : 아파트 매매가격 추정 / r: 아파트 전월세가격 추정')
 
@@ -148,7 +148,6 @@ class AptPredicate(object):
     def predicate(self, date):
         # 현재 시장에 나와있는 아직 팔리지 않는 매물들을 바탕으로 예측을 실시
         month_range = get_month_range(date, self.previous_month_size)
-
         # 현재 시장에 나와있는 매물데이터 수집
         new_trade_list = GinAptQuery.get_new_apt_trade_list(
             apt_detail_pk=self.apt_detail_pk,
@@ -434,18 +433,18 @@ class AptPredicate(object):
         return predicate_values
 
     @staticmethod
-    def __smooth_triangle(data, degree):
-        triangle = np.concatenate((np.arange(degree + 1), np.arange(degree)[::-1]))
-        smoothed = []
-
-        for i in range(degree, len(data) - degree * 2):
-            point = data[i:i + len(triangle)] * triangle
-            smoothed.append(np.sum(point) / np.sum(triangle))
-        # Handle boundaries
-        smoothed = [smoothed[0]] * int(degree + degree / 2) + smoothed
-        while len(smoothed) < len(data):
-            smoothed.append(smoothed[-1])
-        return smoothed
+    def __smooth_triangle(data, window):
+        alpha = 2 / (window + 1.0)
+        alpha_rev = 1 - alpha
+        n = data.shape[0]
+        pows = alpha_rev ** (np.arange(n + 1))
+        scale_arr = 1 / pows[:-1]
+        offset = data[0] * pows[1:]
+        pw0 = alpha * alpha_rev ** (n - 1)
+        mult = data * pw0 * scale_arr
+        cumsums = mult.cumsum()
+        out = offset + cumsums * scale_arr[::-1]
+        return out
 
     @staticmethod
     def __select_trade_list(trade_list):
@@ -515,6 +514,11 @@ if __name__ == '__main__':
 
     pk_list = [pk[1] for pk in GinAptQuery.get_predicate_apt_list().fetchall()]
 
+    #
+    # pk_list=[]
+    # with open('model/pk_list.txt', 'r') as ff:
+    #     for line in ff:
+    #         pk_list.append(int(line.strip()))
 
     def formatting_df(_df, columns, _apt_detail_pk):
         # formatting pandas frame for inject database
@@ -525,9 +529,9 @@ if __name__ == '__main__':
         return _df
 
 
-    price_predicate_columns = ['reg_date', 'price_max', 'price_avg', 'price_min']
-    price_smoothing_predicate_columns = ['reg_date', 'price_max_smoothing', 'price_avg_smoothing',
-                                         'price_min_smoothing']
+    price_predicate_columns = ['reg_date', 'price_min', 'price_avg', 'price_max']
+    price_smoothing_predicate_columns = ['reg_date', 'price_min_smoothing', 'price_avg_smoothing',
+                                         'price_max_smoothing']
 
     # -------------------------------------------------------------------------------------------------------------- #
     # command :
@@ -535,7 +539,6 @@ if __name__ == '__main__':
     # explanation : [전체 아파트 리스트]를 [처음부터 끝]까지 가격 예측
     # option: --db_inject 을 추가하면 mysql 에 예측된 결과 저장
     # -------------------------------------------------------------------------------------------------------------- #
-
     if argument.full_pk and argument.full_date:
         for detail_pk in pk_list:
             try:
@@ -558,7 +561,7 @@ if __name__ == '__main__':
                     GinAptQuery.insert_or_update_predicate_value(list(_result_df.values))
                     GinAptQuery.insert_or_update_predicate_smoothing_value(list(_result_df_smooth.values))
                     print(f'{detail_pk} pk data - Database Injection')
-            except FeatureExistsError:
+            except Exception:
                 pass
 
         print('Complete Database Injection')
@@ -573,8 +576,10 @@ if __name__ == '__main__':
     # Reference: --db_inject 을 추가하면 mysql 에 예측된 결과 저장
     # -------------------------------------------------------------------------------------------------------------- #
     elif argument.full_pk:
-        temp = []
         for detail_pk in pk_list:
+            temp = []
+            price_predicate_columns = ['reg_date', 'price_min', 'price_avg', 'price_max']
+            print('--------------- pk {} ------------------'.format(detail_pk))
             try:
                 regression = AptPredicate(apt_detail_pk=detail_pk, models=m,
                                           feature_engine=f_e, feature_list=argument.feature_list,
@@ -584,43 +589,47 @@ if __name__ == '__main__':
                                           trade_month_size=argument.trade_month_size,
                                           trade_recent_month_size=argument.trade_recent_month_size,
                                           trade_cd=argument.trade_cd)
-                _result = regression.predicate(date=argument.date)
-                print('price_min : {0:.4f}   price_avg : {1:.4f}   price_max : {2:.4f}'.format(
-                    _result['predicate_price_min'], _result['predicate_price_avg'], _result['predicate_price_max']
-                ))
+                for date in pd.date_range('2019-08-01', '2020-02-01', freq='D'):
+                    if str(date.date().day) not in ['1','11','21']:
+                        continue
+                    _result = regression.predicate(date=str(date.date()))
+                    print('date {} ----- predicted avg {:.4f}'.format(str(date.date()), _result['predicate_price_avg']))
+                    # print('price_min : {0:.4f}   price_avg : {1:.4f}   price_max : {2:.4f}'.format(
+                    #     _result['predicate_price_min'], _result['predicate_price_avg'], _result['predicate_price_max']
+                    # ))
 
-                if argument.db_inject:
-                    # Store data for Database injection
-                    temp.append([argument.date,
-                                 _result['predicate_price_min'],
-                                 _result['predicate_price_avg'],
-                                 _result['predicate_price_max'],
-                                 detail_pk,
-                                 argument.trade_cd])
-            except FeatureExistsError:
+                    if argument.db_inject:
+                        # Store data for Database injection
+                        temp.append([date.date(),
+                                     _result['predicate_price_min'],
+                                     _result['predicate_price_avg'],
+                                     _result['predicate_price_max'],
+                                     detail_pk,
+                                     argument.trade_cd])
+            except Exception as e:
+                print(detail_pk)
+                print(e)
                 pass
 
-        # Database injection
-        if argument.db_inject:
-            # Integrated frame
-            price_predicate_columns.extend(['apt_detail_pk', 'trade_cd'])
-            _result_df = pd.DataFrame(temp, columns=price_predicate_columns)
-
-            # Database injection (price_min, price_max, price_avg)
-            GinAptQuery.insert_or_update_predicate_value(list(_result_df.values))
-
-            # Database injection (price_min_smoothing, price_max_smoothing, price_avg_smoothing)
-            for detail_pk in _result_df.apt_detail_pk:
-                db_to_frame = pd.read_sql_query(f"SELECT * FROM predicate_price WHERE apt_detail_pk={detail_pk};",
-                                                settings.cnx)
-                db_to_frame = db_to_frame[['reg_date', 'price_min', 'price_avg', 'price_max']]
-                db_to_frame.columns = ['date', 'predicate_price_min', 'predicate_price_avg', 'predicate_price_max']
-
-                db_frame_smoothing = AptPredicate.predicate_transform_range(db_to_frame)
-                db_frame_smoothing = formatting_df(db_frame_smoothing, price_smoothing_predicate_columns, detail_pk)
-                GinAptQuery.insert_or_update_predicate_smoothing_value(list(db_frame_smoothing.values))
-
-            print('Complete Database Injection')
+            # Database injection
+            if argument.db_inject:
+                # Integrated frame
+                price_predicate_columns.extend(['apt_detail_pk', 'trade_cd'])
+                _result_df = pd.DataFrame(temp, columns=price_predicate_columns)
+                # Database injection (price_min, price_max, price_avg)
+                GinAptQuery.insert_or_update_predicate_value(list(_result_df.values))
+                # Database injection (price_min_smoothing, price_max_smoothing, price_avg_smoothing)
+                #### do not attach smoothing function
+                # for detail_pk in _result_df.apt_detail_pk:
+                #     db_to_frame = pd.read_sql_query(f"SELECT * FROM predicate_price_ WHERE apt_detail_pk={detail_pk} and trade_cd='{argument.trade_cd}';",settings.cnx)
+                #     db_to_frame = db_to_frame[['reg_date', 'price_min', 'price_avg', 'price_max']]
+                #     db_to_frame.columns = ['date', 'predicate_price_min', 'predicate_price_avg', 'predicate_price_max']
+                #     db_frame_smoothing = AptPredicate.predicate_transform_range(db_to_frame)
+                #
+                #     db_frame_smoothing = formatting_df(db_frame_smoothing, price_smoothing_predicate_columns, detail_pk)
+                #
+                #     GinAptQuery.insert_or_update_predicate_smoothing_value(list(db_frame_smoothing.values))
+                print('Complete Database Injection')
 
     # -------------------------------------------------------------------------------------------------------------- #
     # Command :
@@ -646,8 +655,7 @@ if __name__ == '__main__':
         if argument.db_inject:
             # formatting for database injection
             _result_df = formatting_df(_result_df, price_predicate_columns, argument.apt_detail_pk)
-            _result_df_smooth = formatting_df(_result_df_smooth, price_smoothing_predicate_columns,
-                                              argument.apt_detail_pk)
+            _result_df_smooth = formatting_df(_result_df_smooth, price_smoothing_predicate_columns, argument.apt_detail_pk)
             # database injection
             GinAptQuery.insert_or_update_predicate_value(list(_result_df.values))
             GinAptQuery.insert_or_update_predicate_smoothing_value(list(_result_df_smooth.values))
@@ -722,7 +730,7 @@ if __name__ == '__main__':
 
             # Database injection (price_min_smoothing, price_max_smoothing, price_avg_smoothing)
             db_to_frame = pd.read_sql_query(
-                f"SELECT * FROM predicate_price WHERE apt_detail_pk={argument.apt_detail_pk};", settings.cnx)
+                f"SELECT * FROM predicate_price_ WHERE apt_detail_pk={argument.apt_detail_pk} and trade_cd='{argument.trade_cd}';", settings.cnx)
             db_to_frame = db_to_frame[['reg_date', 'price_min', 'price_avg', 'price_max']]
             db_to_frame.columns = ['date', 'predicate_price_min', 'predicate_price_avg', 'predicate_price_max']
 

@@ -760,10 +760,13 @@ def optimized_make_feature(feature_name_list, apt_master_pk, apt_detail_pk, trad
     apt_complex_group_list = AptComplexGroup.get_similarity_apt_list(
         apt_detail_pk=apt_detail_pk
     )
-
+    max_floor = int(GinAptQuery.get_max_floor(apt_detail_pk).fetchone()[0])
+    floor=int(floor)
+    if floor > max_floor:
+        floor=max_floor
     floor_list = AptFloorGroup.get_similarity_apt_floor_list(
         apt_detail_pk=apt_detail_pk,
-        floor=floor
+        floor=str(floor)
     )
     # ------------------------------------------------------------------------------------ #
     # 1. 매물 정보를 이용한 feature 생성

@@ -9,7 +9,7 @@ import time
 from grouping import AptGroup, AptComplexGroup, AptFloorGroup
 from datetime import datetime
 from database import GinAptQuery, cursor, cnx
-from feature_new import make_feature, optimized_make_feature, optimized_make_feature2, FeatureExistsError, \
+from feature import make_feature, optimized_make_feature, optimized_make_feature2, FeatureExistsError, \
     AptPriceRegressionFeature
 
 
@@ -55,7 +55,7 @@ def get_args():
 
     parser.add_argument('--trade_cd',
                         type=str,
-                        choices=['t', 'r'],
+                        choices=['t', 'd'],
                         default=settings.trade_cd,
                         help='t : 아파트 매매가격 추정 / r: 아파트 전월세가격 추정')
 
@@ -272,29 +272,31 @@ def make_dataset_optimize(argument):
 
             for pk_apt_trade, _, date, floor, extent, price in \
                     query.get_trade_price_optimize(apt_detail_pk, argument.trade_cd).fetchall():
-                try:
-                    feature = optimized_make_feature2(feature_name_list=argument.features, apt_master_pk=apt_master_pk,
-                                                      apt_detail_pk=apt_detail_pk, trade_cd=argument.trade_cd,
-                                                      trg_date=date, sale_month_size=argument.sale_month_size,
-                                                      sale_recent_month_size=argument.sale_recent_month_size,
-                                                      trade_month_size=argument.trade_month_size,
-                                                      trade_recent_month_size=argument.trade_recent_month_size,
-                                                      floor=floor, extent=extent,
-                                                      apt_complex_group_list=apt_complex_group_list,
-                                                      floor_lists=floor_lists,
-                                                      total_sale_df=total_sale_df,
-                                                      total_trade_df=total_trade_df,
-                                                      aptPriceRegressionFeature=apt_price_regression_feature,
-                                                      volume_rate_df=volume_rate_df,
-                                                      trade_pk=pk_apt_trade)
 
-                except FeatureExistsError:
-                    # 매매 혹은 매물 데이터를 바탕으로한 feature 하나도 존재하지 않을때...
+                if (((date - pd.to_datetime('2018-01-01')).days) < 0) or (((date - pd.to_datetime('2019-08-01')).days)>0):
                     continue
-                except Exception as e:
-                    print(e)
-                    continue
-
+                else:
+                    try:
+                        feature = optimized_make_feature2(feature_name_list=argument.features, apt_master_pk=apt_master_pk,
+                                                          apt_detail_pk=apt_detail_pk, trade_cd=argument.trade_cd,
+                                                          trg_date=date, sale_month_size=argument.sale_month_size,
+                                                          sale_recent_month_size=argument.sale_recent_month_size,
+                                                          trade_month_size=argument.trade_month_size,
+                                                          trade_recent_month_size=argument.trade_recent_month_size,
+                                                          floor=floor, extent=extent,
+                                                          apt_complex_group_list=apt_complex_group_list,
+                                                          floor_lists=floor_lists,
+                                                          total_sale_df=total_sale_df,
+                                                          total_trade_df=total_trade_df,
+                                                          aptPriceRegressionFeature=apt_price_regression_feature,
+                                                          volume_rate_df=volume_rate_df,
+                                                          trade_pk=pk_apt_trade)
+                    except FeatureExistsError:
+                        # 매매 혹은 매물 데이터를 바탕으로한 feature 하나도 존재하지 않을때...
+                        continue
+                    except Exception as e:
+                        print(e)
+                        continue
                 feature_df = feature['data']
                 feature_df['apt_detail_pk'] = apt_detail_pk
                 feature_df[argument.label_name] = price
@@ -309,10 +311,10 @@ def make_dataset_optimize(argument):
             # If KeyboardInterrupt file save...
             break
         end_time = time.time()
+
     # file save...
     print('file saving...')
     for status, feature_df in total_data.items():
-        print(status)
         if len(feature_df) == 0:
             continue
         filename = 'apt_dataset_{}.csv'.format(status)
@@ -333,7 +335,7 @@ def make_dataset_concurrent(argument):
         settings.trade_feature_model_name: []
     }
 
-    process_num = 40
+    process_num = 4
     print('total count : {} '.format(len(pk_list)))
     begin_time = time.time()
     try:
@@ -415,7 +417,8 @@ def make_dataset_sub(query, argument, begin_time, apt_pk):
 
 if __name__ == '__main__':
     args = get_args()
-
+    if args.trade_cd!='t':
+        args.save_path='dataset_rent'
     # making dataset
     if args.make_dataset:
         make_dataset_optimize(args)

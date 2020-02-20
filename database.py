@@ -512,7 +512,7 @@ class GinAptQuery(object):
 	@staticmethod
 	def insert_or_update_predicate_value(values):
 		query = """
-            insert into predicate_price (reg_date, price_max, price_avg, price_min, apt_detail_pk, trade_cd) 
+            insert into predicate_price_ (reg_date, price_min, price_avg, price_max, apt_detail_pk, trade_cd) 
             values (%s, %s, %s, %s, %s, %s)
             ON DUPLICATE KEY UPDATE
             price_min=VALUES(price_min), price_avg=VALUES(price_avg), price_max=VALUES(price_max)
@@ -523,7 +523,7 @@ class GinAptQuery(object):
 	@staticmethod
 	def insert_or_update_predicate_smoothing_value(values):
 		query = """
-            insert into predicate_price (reg_date, price_max_smoothing, price_avg_smoothing, price_min_smoothing, 
+            insert into predicate_price_ (reg_date, price_min_smoothing, price_avg_smoothing, price_max_smoothing, 
             apt_detail_pk, trade_cd)
             values (%s, %s, %s, %s, %s, %s)
             ON DUPLICATE KEY UPDATE
@@ -536,29 +536,94 @@ class GinAptQuery(object):
 	#### for testing
 	@staticmethod
 	def aaa():
-		query = """SELECT  b.idx
-	              FROM apt_master a
-	             INNER JOIN apt_detail b
-	                ON a.idx = b.master_idx
-	             WHERE a.total_num_of_family > 99
-	               AND a.bldg_cd IN (1, 6)
-	               AND b.NUM_OF_FAMILY > 29
-	             ORDER BY a.idx, b.idx
-	        """
+		# query = """SELECT  b.idx
+	    #           FROM apt_master a
+	    #          INNER JOIN apt_detail b
+	    #             ON a.idx = b.master_idx
+	    #          WHERE a.total_num_of_family > 99
+	    #            AND a.bldg_cd IN (1, 6)
+	    #            AND b.NUM_OF_FAMILY > 29
+	    #          ORDER BY a.idx, b.idx
+	    #     """
+		query = """select  distinct(pk_apt_detail) from GIN_NEW_02.kab_price_apt;"""
 		cursor.execute(query)
 		return cursor
 
 	@staticmethod
-	def bbb():
-		query = """SELECT distinct(apt_detail_pk) FROM GIN.predicate_price where trade_cd='r';"""
+	def bbb(trade_cd):
+		query = """SELECT distinct(apt_detail_pk) FROM predicate_price_ where trade_cd='{}';""".format(trade_cd)
 		cursor.execute(query)
 		return cursor
 
 	@staticmethod
 	def get_predicted_price(pk, trade_cd, table="new"):
 		if table=="old":
-			query = """select * from GIN.predicate_price where predicate_price.apt_detail_pk={} and predicate_price.trade_cd='{}';""".format(pk, trade_cd)
+			query = """select * from predicate_price_ where predicate_price_.apt_detail_pk={} and predicate_price_.trade_cd='{}' order by reg_date ASC;""".format(pk, trade_cd)
 		else:
-			query = """select * from GIN.predicate_price_ where predicate_price_.apt_detail_pk={} and predicate_price_.trade_cd='{}';""".format(pk, trade_cd)
+			query = """select * from predicate_price_ where predicate_price_.apt_detail_pk={} and predicate_price_.trade_cd='{}' order by reg_date ASC;""".format(pk, trade_cd)
 		cursor.execute(query)
 		return cursor
+
+	@staticmethod
+	def get_predicate_apt_list_():
+		# 예측할 아파트 단지 리스트 출력
+		query = ("""
+	             select  distinct(apt_detail_pk) from GIN_NEW_02.predicate_price_;
+	        """)
+		cursor.execute(query)
+		return cursor
+
+
+	@staticmethod
+	def get_kab_predicted(pk, trade_cd):
+		# 예측할 아파트 단지 리스트 출력
+		if trade_cd =='t':
+			query = ("""
+					 select yyyymmdd as reg_date, gin_trade_h, gin_trade_m, gin_trade_l, pk_apt_detail from kab_price_apt where pk_apt_detail={};
+				""".format(pk))
+		else:
+			query = ("""
+						 select yyyymmdd as reg_date, gin_rent_h, gin_rent_m, gin_rent_l, pk_apt_detail from kab_price_apt where pk_apt_detail={};
+					""".format(pk))
+		cursor.execute(query)
+		return cursor
+
+
+	@staticmethod
+	def get_both_predicted(pk, trade_cd):
+		# 예측할 아파트 단지 리스트 출력
+		if trade_cd =='t':
+			query = ("""
+						select locs.reg_date as 'date', locs.apt_detail_pk as 'pk', locs.price_avg as 'locs price', kab.gin_trade_m as 'gin price' from predicate_price_ as locs
+						inner join kab_price_apt as kab
+						on kab.pk_apt_detail = locs.apt_detail_pk
+						and kab.yyyymmdd = locs.reg_date
+						where locs.apt_detail_pk={} and locs.trade_cd='{}';
+				""".format(pk, trade_cd))
+		else:
+			query = ("""
+						select locs.reg_date as 'date', locs.apt_detail_pk as 'pk', locs.price_avg as 'locs price', kab.gin_rent_m as 'gin price' from predicate_price_ as locs
+						inner join kab_price_apt as kab
+						on kab.pk_apt_detail = locs.apt_detail_pk
+						and kab.yyyymmdd = locs.reg_date
+						where locs.apt_detail_pk={} and locs.trade_cd='{}';
+					""".format(pk, trade_cd))
+		cursor.execute(query)
+		return cursor
+
+	@staticmethod
+	def get_predicted_price_(pk, trade_cd):
+		query = """select reg_date, apt_detail_pk, price_min, price_avg, price_max from predicate_price_ where predicate_price_.apt_detail_pk={} and predicate_price_.trade_cd='{}' order by reg_date ASC;""".format(pk, trade_cd)
+		cursor.execute(query)
+		return cursor
+# #
+# trade_cd='d'
+# all_pk = sorted([pk[0] for pk in GinAptQuery.aaa().fetchall()])
+# predicted_pk = sorted([pk[0] for pk in GinAptQuery.bbb(trade_cd=trade_cd).fetchall()])
+# # not_predicted_pk = sorted(set(all_pk).difference(set(predicted_pk)))
+# not_predicted_pk = sorted(set(all_pk) ^ set(predicted_pk))
+#
+# with open('model\pk_list.txt', mode='w') as f:
+# 	for pk in not_predicted_pk:
+# 		f.writelines(str(pk)+'\n')
+# 	f.close()

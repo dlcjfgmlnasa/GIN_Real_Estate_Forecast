@@ -757,13 +757,9 @@ def optimized_make_feature(feature_name_list, apt_master_pk, apt_detail_pk, trad
                            trade_month_size, trade_recent_month_size, floor, extent,
                            trade_pk=None):
     # optimized feature engineering code
-    apt_complex_group_list = AptComplexGroup.get_similarity_apt_list(
-        apt_detail_pk=apt_detail_pk
-    )
-    floor_list = AptFloorGroup.get_similarity_apt_floor_list(
-        apt_detail_pk=apt_detail_pk,
-        floor=floor
-    )
+    for detail_pk in pk_list:
+            price_predicate_columns = ['reg_date', 'price_max', 'price_avg', 'price_min']
+            print('--------------- pk {} ------------------'.format(detail_pk))
     import itertools
     ### create possible combinations of previous_month (maximum 5); sale-trade_month (maximum 6); recent_sale-trade_month (maximum 2)
     sale_month_range = range(1, sale_month_size + 1)
