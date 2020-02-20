@@ -1,6 +1,7 @@
 .env
 .idea/
 venv/
+backup/*
 model/store/*
 model/store_rent/*
 /dataset/*
