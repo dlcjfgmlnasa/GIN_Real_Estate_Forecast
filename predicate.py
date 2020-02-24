@@ -589,26 +589,23 @@ if __name__ == '__main__':
                                           trade_month_size=argument.trade_month_size,
                                           trade_recent_month_size=argument.trade_recent_month_size,
                                           trade_cd=argument.trade_cd)
-                for date in pd.date_range('2019-08-01', '2020-02-01', freq='D'):
-                    if str(date.date().day) not in ['1','11','21']:
-                        continue
-                    _result = regression.predicate(date=str(date.date()))
-                    print('date {} ----- predicted avg {:.4f}'.format(str(date.date()), _result['predicate_price_avg']))
-                    # print('price_min : {0:.4f}   price_avg : {1:.4f}   price_max : {2:.4f}'.format(
-                    #     _result['predicate_price_min'], _result['predicate_price_avg'], _result['predicate_price_max']
-                    # ))
 
-                    if argument.db_inject:
-                        # Store data for Database injection
-                        temp.append([date.date(),
-                                     _result['predicate_price_min'],
-                                     _result['predicate_price_avg'],
-                                     _result['predicate_price_max'],
-                                     detail_pk,
-                                     argument.trade_cd])
+                _result = regression.predicate(date=argument.date)
+                print('date {} -- min: {:.4f} -- avg: {:.4f} -- max: {:.4f}'.format(argument.date, _result['predicate_price_min'], _result['predicate_price_max'], _result['predicate_price_avg']))
+                # print('price_min : {0:.4f}   price_avg : {1:.4f}   price_max : {2:.4f}'.format(
+                #     _result['predicate_price_min'], _result['predicate_price_avg'], _result['predicate_price_max']
+                # ))
+
+                if argument.db_inject:
+                    # Store data for Database injection
+                    temp.append([argument.date,
+                                 _result['predicate_price_min'],
+                                 _result['predicate_price_avg'],
+                                 _result['predicate_price_max'],
+                                 detail_pk,
+                                 argument.trade_cd])
             except Exception as e:
-                print(detail_pk)
-                print(e)
+                print('Error: {} --- pk: {}'.format(e, detail_pk))
                 pass
 
             # Database injection
@@ -620,15 +617,15 @@ if __name__ == '__main__':
                 GinAptQuery.insert_or_update_predicate_value(list(_result_df.values))
                 # Database injection (price_min_smoothing, price_max_smoothing, price_avg_smoothing)
                 #### do not attach smoothing function
-                # for detail_pk in _result_df.apt_detail_pk:
-                #     db_to_frame = pd.read_sql_query(f"SELECT * FROM predicate_price_ WHERE apt_detail_pk={detail_pk} and trade_cd='{argument.trade_cd}';",settings.cnx)
-                #     db_to_frame = db_to_frame[['reg_date', 'price_min', 'price_avg', 'price_max']]
-                #     db_to_frame.columns = ['date', 'predicate_price_min', 'predicate_price_avg', 'predicate_price_max']
-                #     db_frame_smoothing = AptPredicate.predicate_transform_range(db_to_frame)
-                #
-                #     db_frame_smoothing = formatting_df(db_frame_smoothing, price_smoothing_predicate_columns, detail_pk)
-                #
-                #     GinAptQuery.insert_or_update_predicate_smoothing_value(list(db_frame_smoothing.values))
+                for detail_pk in _result_df.apt_detail_pk:
+                    db_to_frame = pd.read_sql_query(f"SELECT * FROM predicate_price_ WHERE apt_detail_pk={detail_pk} and trade_cd='{argument.trade_cd}';",settings.cnx)
+                    db_to_frame = db_to_frame[['reg_date', 'price_min', 'price_avg', 'price_max']]
+                    db_to_frame.columns = ['date', 'predicate_price_min', 'predicate_price_avg', 'predicate_price_max']
+                    db_frame_smoothing = AptPredicate.predicate_transform_range(db_to_frame)
+
+                    db_frame_smoothing = formatting_df(db_frame_smoothing, price_smoothing_predicate_columns, detail_pk)
+
+                    GinAptQuery.insert_or_update_predicate_smoothing_value(list(db_frame_smoothing.values))
                 print('Complete Database Injection')
 
     # -------------------------------------------------------------------------------------------------------------- #
